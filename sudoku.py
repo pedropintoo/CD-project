@@ -38,18 +38,18 @@ class Sudoku:
 
         # Check rows
         for row in range(9):
-            if sum(self.grid[row]) != 45:
+            if sum(self.grid[row]) != 45 or len(set(self.grid[row])) != 9:
                 return False
 
         # Check columns
         for col in range(9):
-            if sum([self.grid[row][col] for row in range(9)]) != 45:
+            if sum([self.grid[row][col] for row in range(9)]) != 45 or len(set([self.grid[row][col] for row in range(9)])) != 9:
                 return False
 
         # Check 3x3 squares
         for i in range(3):
             for j in range(3):
-                if sum([self.grid[i*3+k][j*3+l] for k in range(3) for l in range(3)]) != 45:
+                if sum([self.grid[i*3+k][j*3+l] for k in range(3) for l in range(3)]) != 45 or len(set([self.grid[i*3+k][j*3+l] for k in range(3) for l in range(3)])) != 9:
                     return False
 
         return True
