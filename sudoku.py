@@ -1,11 +1,20 @@
 import time
 from collections import deque
 
+
 class Sudoku:
     def __init__(self, sudoku):
         self.grid = sudoku
         self.recent_requests = deque()
 
+    def _limit_calls(self, base_delay=0.01, interval=10, threshold=5):
+        current_time = time.time()
+        self.recent_requests.append(current_time)
+        num_requests = len([t for t in self.recent_requests if current_time - t < 10])
+
+        if num_requests > 5:
+            delay = 0.01 * (num_requests - 5 + 1)
+            time.sleep(delay)
 
     def __str__(self):
         string_representation = "| - - - - - - - - - - - |\n"
@@ -22,24 +31,24 @@ class Sudoku:
 
         return string_representation
 
+
+    def check_row(self, row, base_delay=0.01, interval=10, threshold=5):
+        """Check if the given row is correct."""
+        self._limit_calls(base_delay, interval, threshold)
+
+        # Check row
+        if sum(self.grid[row]) != 45:
+            return False
+
+        return True
+
     def check(self, base_delay=0.01, interval=10, threshold=5):
         """Check if the given Sudoku solution is correct.
         
         You MUST incorporate this method without modifications into your final solution.
         """
-
-        current_time = time.time()
-        self.recent_requests.append(current_time)
-        num_requests = len([t for t in self.recent_requests if current_time - t < interval])
-
-        if num_requests > threshold:
-            delay = base_delay * (num_requests - threshold + 1)  # Increase delay based on excess requests
-            time.sleep(delay)
-
-        # Check rows
         for row in range(9):
-            if sum(self.grid[row]) != 45:
-                return False
+            self.check_row(row, base_delay, interval, threshold)
 
         # Check columns
         for col in range(9):
