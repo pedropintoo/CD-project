@@ -75,17 +75,20 @@ class Sudoku:
         You MUST incorporate this method without modifications into your final solution.
         """
         for row in range(9):
-            self.check_row(row, base_delay, interval, threshold)
+            if (not self.check_row(row, base_delay, interval, threshold)):
+                return False
 
         # Check columns
         for col in range(9):
-            self.check_column(col, base_delay, interval, threshold)
+            if (not self.check_column(col, base_delay, interval, threshold)):
+                return False
 
 
         # Check 3x3 squares
         for i in range(3):
             for j in range(3):
-                self.check_square(i*3, j*3, base_delay, interval, threshold)
+                if (not self.check_square(i*3, j*3, base_delay, interval, threshold)):
+                    return False
 
         return True
 
