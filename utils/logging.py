@@ -4,9 +4,23 @@ class Logger:
 
     def __init__(self, identifierName: str):
         self.log = logging.getLogger(identifierName)
+        CustomFormatter().setup(self.log)
 
     def error(self, errorMsg):
         self.log.error(errorMsg)
+
+    def info(self, infoMsg):
+        self.log.info(infoMsg)
+
+    def debug(self, debugMsg):
+        self.log.debug(debugMsg)      
+
+    def warning(self, warningMsg):
+        self.log.warning(warningMsg)
+
+    def critical(self, criticalMsg):
+        self.log.critical(criticalMsg)
+            
 
 class CustomFormatter(logging.Formatter):
 
