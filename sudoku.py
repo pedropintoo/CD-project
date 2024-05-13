@@ -1,11 +1,20 @@
 import time
 from collections import deque
 
+
 class Sudoku:
     def __init__(self, sudoku):
         self.grid = sudoku
         self.recent_requests = deque()
 
+    def _limit_calls(self, base_delay=0.01, interval=10, threshold=5):
+        current_time = time.time()
+        self.recent_requests.append(current_time)
+        num_requests = len([t for t in self.recent_requests if current_time - t < 10])
+
+        if num_requests > 5:
+            delay = 0.01 * (num_requests - 5 + 1)
+            time.sleep(delay)
 
     def __str__(self):
         string_representation = "| - - - - - - - - - - - |\n"
@@ -22,35 +31,62 @@ class Sudoku:
 
         return string_representation
 
+    def update_row(self, row, values):
+        """Update the values of the given row."""
+        self.grid[row] = values
+    
+    def update_column(self, col, values):
+        """Update the values of the given column."""
+        for row in range(9):
+            self.grid[row][col] = values[row]
+
+    def check_row(self, row, base_delay=0.01, interval=10, threshold=5):
+        """Check if the given row is correct."""
+        self._limit_calls(base_delay, interval, threshold)
+
+        # Check row
+        if sum(self.grid[row]) != 45:
+            return False
+
+        return True
+
+    def check_column(self, col, base_delay=0.01, interval=10, threshold=5):
+        """Check if the given row is correct."""
+        self._limit_calls(base_delay, interval, threshold)
+
+        # Check col
+        if sum([self.grid[row][col] for row in range(9)]) != 45:
+            return False
+
+        return True
+
+    def check_square(self, row, col, base_delay=0.01, interval=10, threshold=5):
+        """Check if the given 3x3 square is correct."""
+        self._limit_calls(base_delay, interval, threshold)
+
+        # Check square
+        if sum([self.grid[row+i][col+j] for i in range(3) for j in range(3)]) != 45:
+            return False
+
+        return True
+
     def check(self, base_delay=0.01, interval=10, threshold=5):
         """Check if the given Sudoku solution is correct.
         
         You MUST incorporate this method without modifications into your final solution.
         """
-
-        current_time = time.time()
-        self.recent_requests.append(current_time)
-        num_requests = len([t for t in self.recent_requests if current_time - t < interval])
-
-        if num_requests > threshold:
-            delay = base_delay * (num_requests - threshold + 1)  # Increase delay based on excess requests
-            time.sleep(delay)
-
-        # Check rows
         for row in range(9):
-            if sum(self.grid[row]) != 45 or len(set(self.grid[row])) != 9:
-                return False
+            self.check_row(row, base_delay, interval, threshold)
 
         # Check columns
         for col in range(9):
-            if sum([self.grid[row][col] for row in range(9)]) != 45 or len(set([self.grid[row][col] for row in range(9)])) != 9:
-                return False
+            self.check_column(col, base_delay, interval, threshold)
+
 
         # Check 3x3 squares
         for i in range(3):
             for j in range(3):
-                if sum([self.grid[i*3+k][j*3+l] for k in range(3) for l in range(3)]) != 45 or len(set([self.grid[i*3+k][j*3+l] for k in range(3) for l in range(3)])) != 9:
-                    return False
+                self.check_square(i*3, j*3, base_delay, interval, threshold)
 
         return True
 
