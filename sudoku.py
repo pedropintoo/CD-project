@@ -82,6 +82,7 @@ class Sudoku:
         for col in range(9):
             self.check_column(col, base_delay, interval, threshold)
 
+
         # Check 3x3 squares
         for i in range(3):
             for j in range(3):
