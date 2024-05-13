@@ -74,4 +74,4 @@ if __name__ == "__main__":
     if sudoku.check():
         print("Sudoku is correct!")
     else:
-        print("Sudoku is incorrect! Please check your solution.")
+        print("Sudoku is incorrect! Please check your solution. ")
