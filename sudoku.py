@@ -45,7 +45,7 @@ class Sudoku:
         self._limit_calls(base_delay, interval, threshold)
 
         # Check row
-        if sum(self.grid[row]) != 45:
+        if sum(self.grid[row]) != 45 or len(set(self.grid[row])) != 9:
             return False
 
         return True
@@ -55,7 +55,7 @@ class Sudoku:
         self._limit_calls(base_delay, interval, threshold)
 
         # Check col
-        if sum([self.grid[row][col] for row in range(9)]) != 45:
+        if sum([self.grid[row][col] for row in range(9)]) != 45 or len(set([self.grid[row][col] for row in range(9)])) != 9:
             return False
 
         return True
@@ -65,7 +65,7 @@ class Sudoku:
         self._limit_calls(base_delay, interval, threshold)
 
         # Check square
-        if sum([self.grid[row+i][col+j] for i in range(3) for j in range(3)]) != 45:
+        if sum([self.grid[row+i][col+j] for i in range(3) for j in range(3)]) != 45 or len(set([self.grid[i*3+k][j*3+l] for k in range(3) for l in range(3)])) != 9:
             return False
 
         return True
