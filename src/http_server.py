@@ -16,8 +16,8 @@ class HTTPProtocol(http.server.BaseHTTPRequestHandler):
         self.wfile.write(bytes(message, "utf8"))
 
 class HTTPServer:
-    def __init__(self):
-        self.server = http.server.HTTPServer(('localhost', 8000), HTTPProtocol)
+    def __init__(self, port):
+        self.server = http.server.HTTPServer(('localhost', port), HTTPProtocol)
         self.server.serve_forever()
 
     def stop(self):
@@ -27,5 +27,3 @@ class HTTPServer:
 
 
 
-    webServer.server_close()
-    print("Server stopped.")
