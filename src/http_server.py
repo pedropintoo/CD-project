@@ -1,36 +1,61 @@
 import http.server as http_server
+from queue import Queue
+import logging
 from threading import Thread
-import time
-import queue
 
 class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
+
+    request_queue = None
+    response_queue = None
+    logger = None
+
     def do_POST(self):
-        self.send_response(200)
-        self.send_header('Content-type','text/html')
-        self.end_headers()
 
-        message = "Hello, World! Here is a POST response"
+        if self.path.endswith("/solve"):
+            length = int(self.headers.get('content-length'))
+            data = self.rfile.read(length).decode('utf8')
 
-        time.sleep(2)
+            self.send_response(200)
+            self.send_header('Content-type','text/html')
+            self.end_headers()
+            
+            self.logger.debug("HTTP request.")
+            # send request to p2p
+            self.response_queue.put(data)
 
-        self.wfile.write(bytes(message, "utf8"))
+            # wait for response
+            response = self.request_queue.get(block=True)
+            self.logger.debug(f"HTTP response.")
 
-class HTTPServer:
+            self.wfile.write((response + "\n").encode("utf8"))
+        else:
+            self.send_response(404)
+            self.end_headers()
+            self.wfile.write(b"404 Not Found\n")    
+
+
+
+class HTTPServerThread(Thread):
     def __init__(self, logger, host, port):
-        self._host: str = host
-        self._port: int = port
+        Thread.__init__(self)
         self.logger = logger
-        self.server = None
+        self._host = host
+        self._port = port
 
-    def run(self):
-        self.logger.info("Starting HTTP server on %s:%d" % (self._host, self._port))
+        # Generate request and response http queues
+        self.request_queue = Queue()
+        self.response_queue = Queue()
+
+        HTTPRequestHandler.request_queue = self.request_queue
+        HTTPRequestHandler.response_queue = self.response_queue
+        HTTPRequestHandler.logger = self.logger
+
+        self.logger.info("HTTP Server started http://%s:%s" % (host, port))
         self.server = http_server.HTTPServer(
-            server_address=(self._host, self._port),
+            server_address=(host, port),
             RequestHandlerClass=HTTPRequestHandler,
         )
-        self.server.serve_forever()
+        
 
-
-
-
-
+    def run(self):
+        self.server.serve_forever()    
