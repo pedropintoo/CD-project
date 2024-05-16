@@ -1,6 +1,7 @@
 import socket
 import selectors
 from threading import Thread
+from queue import Queue
 
 class P2PServerThread(Thread):
     def __init__(self, logger, host, port, anchor, handicap):
@@ -12,6 +13,9 @@ class P2PServerThread(Thread):
         self.anchor = anchor
         self.handicap = handicap
         self.selector = selectors.DefaultSelector()
+
+        # Generate request p2p queue
+        self.request_queue = Queue()
         
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._socket.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1) # Reuse address
@@ -33,6 +37,18 @@ class P2PServerThread(Thread):
                 callback = key.data
                 callback(key.fileobj, mask)   
 
+    def connect(self, host, port):
+        """Connect to a peer."""
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.logger.debug(f"Connecting to {host}:{port}")
+            sock.connect((host, int(port)))
+            sock.setblocking(False)
+            self.selector.register(sock, selectors.EVENT_READ, self.handle_requests)
+            return sock
+        except Exception as e:
+            self.logger.error(f"Failed to connect to {host}:{port}. {e}")
+            return None
 
     ############## Handlers ##############      
 
@@ -43,14 +59,14 @@ class P2PServerThread(Thread):
         conn.setblocking(False)
 
         # Handle future data from this client  
-        self.sel.register(conn, mask, self.handle_requests)              
+        self.selector.register(conn, mask, self.handle_requests)              
         
     def handle_requests(self, conn, mask):
         """Handle incoming data."""
         data = conn.recv(1024)
         if data:
             self.logger.debug(f"Received {data} from {conn.getpeername()}")
-            conn.send(data)
+            self.request_queue.put({"conn": conn, "data": data})
         else:
             self.sel.unregister(conn)
             conn.close()
