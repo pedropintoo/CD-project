@@ -1,10 +1,14 @@
 import logging
+import os
 
 class Logger:
 
-    def __init__(self, identifierName: str):
+    def __init__(self, identifierName: str, logFile: str = None):
         self.log = logging.getLogger(identifierName)
         CustomFormatter().setup(self.log)
+
+        self.log.addHandler(logging.FileHandler(logFile))
+
 
     def error(self, errorMsg):
         self.log.error(errorMsg)
@@ -26,7 +30,7 @@ class CustomFormatter(logging.Formatter):
 
     colors = {
         'DEBUG': '\x1b[38;20m',   # Gray
-        'INFO': '\x1b[38;20m',    # Gray
+        'INFO': '\033[38;2;33;213;33m',    # Green
         'WARNING': '\033[93m',    # Yellow
         'ERROR': '\033[91m',      # Red
         'CRITICAL': '\033[1;31m'  # Dark Red
