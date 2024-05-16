@@ -9,6 +9,10 @@ class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
     response_queue = None
     logger = None
 
+    # Suppress http console output
+    def log_message(self, format, *args):
+        return
+    
     def do_POST(self):
 
         if self.path.endswith("/solve"):
