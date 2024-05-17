@@ -2,14 +2,16 @@ import socket
 import selectors
 from threading import Thread
 from queue import Queue
+from src.utils.network import create_socket
 
 class P2PServerThread(Thread):
-    def __init__(self, logger, host, port, anchor, handicap):
+    def __init__(self, logger, host, port, anchor, handicap, network):
         Thread.__init__(self)
         self.logger = logger
         self._host = host
         self._port = port
-
+        self.network = network
+        
         self.anchor = anchor
         self.handicap = handicap
         self.selector = selectors.DefaultSelector()
@@ -29,6 +31,13 @@ class P2PServerThread(Thread):
         self.logger.info("P2P Server started %s:%s" % (self._host, self._port))
         self.selector.register(self._socket, selectors.EVENT_READ, self.handle_new_connection)
 
+        # JOIN_REQUEST first message
+        if self.anchor:
+            sock = self.connect(self.anchor.split(":")[0], self.anchor.split(":")[1])
+
+            P2PProtocol.send_join_request(sock)
+
+
         while True:
             # Wait for events
             events = self.selector.select()
@@ -40,12 +49,21 @@ class P2PServerThread(Thread):
     def connect(self, host, port):
         """Connect to a peer."""
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.logger.debug(f"Connecting to {host}:{port}")
+
+            # create a socket connection
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.connect((host, int(port)))
             sock.setblocking(False)
+
+            # Register the socket to the selector
             self.selector.register(sock, selectors.EVENT_READ, self.handle_requests)
+            
+            # Store the socket in the network
+            self.network[host + ":" + str(port)] = sock
+
             return sock
+
         except Exception as e:
             self.logger.error(f"Failed to connect to {host}:{port}. {e}")
             return None

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import argparse
-import utils.network as utils_network
+import src.utils.network as utils_network
 from src.node import Node
 
 if __name__ == "__main__":
