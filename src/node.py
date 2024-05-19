@@ -3,7 +3,7 @@ import time
 import socket
 import queue
 import pickle
-from src.p2p_loadbalancer import WorkersManager, TaskManager
+from src.p2p_loadbalancer import WTManager, Worker
 from src.p2p_server import P2PServerThread
 from src.http_server import HTTPServerThread
 from src.utils.logger import Logger
@@ -25,8 +25,8 @@ class Node:
         self.http_server = HTTPServerThread(self.logger, host, http_port, self.stats, self.network)
         self.p2p_server = P2PServerThread(self.logger, host, p2p_port, handicap)
 
-        self.workersManager = WorkersManager()
-        self.taskManager = TaskManager(self.workersManager)
+        # Workers & Tasks Manager (load balancer)
+        self.wtManager = WTManager() 
 
 
     def connect(self, host_port):
@@ -50,8 +50,11 @@ class Node:
 
     def send_msg(self, sock, msg):
         """Send a message through a socket."""
-        P2PProtocol.send_msg(sock, msg)
-        self.logger.debug(f"P2P-sent: {msg.data['command']}")          
+        try:
+            P2PProtocol.send_msg(sock, msg)
+            self.logger.debug(f"P2P-sent: {msg.data['command']}")  
+        except Exception as e:
+            self.logger.error(f"Failed to send message. {e}")
 
     def next_task(self):
         """Find the next task to be send."""
@@ -72,141 +75,147 @@ class Node:
         # Connect to anchor (if any)
         if self.anchor:
             sock = self.connect(self.anchor) # create connection and store in socketsDict
-            self.workersManager.socketsDict[self.anchor] = sock
+            self.wtManager.socketsDict[self.anchor] = sock
+            self.wtManager.workersDict[self.anchor] = Worker(self.anchor, sock)
             
             msg = P2PProtocol.join_request(self.p2p_server.replyAddress)
             self.send_msg(sock, msg)
 
-        # Main loop
+######### Main loop
         while True:
-
-            try:
-                http_response = self.http_server.request_queue.get(block=False)
-            except queue.Empty:
-                http_response = None
             
-            if http_response is not None:
-                self.isHandlingHTTP = True
-                self.http_tasks = {i: -1 for i in range(int(http_response))} # start tasks structure
-                self.logger.debug(f"HTTP: {http_response}")
-                
-                task_id = 0
-                for sock in self.workersManager.socketsDict.values():
-                    self.http_tasks[task_id] = 0 # sent
-                      
-                    msg = P2PProtocol.solve_request(self.p2p_server.replyAddress, task_id)
-                    self.send_msg(sock, msg)
-
-                    task_id += 1 
-                                     
+            # get http request (if any)                
             try:
-                request = self.p2p_server.request_queue.get(block=False) 
+                http_request = self.http_server.request_queue.get(block=False) 
             except queue.Empty:
-                request = None
-                   
-            if request is not None:
-                data = request.data
+                http_request = None
 
+            # get p2p request (if any)
+            try:
+                p2p_request = self.p2p_server.request_queue.get(block=False)  
+            except queue.Empty:
+                p2p_request = None    
+            
+
+            # Handle http requests (if any)
+            if http_request is not None:
+                self.logger.debug(f"HTTP: Requested {http_request} tasks.")
+                self.isHandlingHTTP = True
+                number_of_tasks = int(http_request)
+                
+                # Add tasks to the pending queue
+                for i in range(number_of_tasks):
+                    self.wtManager.add_pending_task(i)
+      
+            # Handle p2p requests (if any)     
+            if p2p_request is not None:
+                data = p2p_request.data # get data attribute from the message
                 self.logger.debug(f"P2P-received: {data['command']}")
                 
+                # Switch from the command
                 if data["command"] == "HELLO":
-                    if self.workersManager.socketsDict.get(data["replyAddress"]) is None:
-                        host_port = data["replyAddress"]
-                        sock = self.connect(host_port)
-                        self.workersManager.socketsDict[host_port] = sock   
+                    host_port = data["replyAddress"]
 
-                    for host_port in data["args"]["nodesList"]: # [host:port, host:port, ...]
-                        
+                    # Add the node that sent the hello message to the network
+                    if self.wtManager.socketsDict.get(host_port) is None:
+                        sock = self.connect(host_port)
+                        self.wtManager.socketsDict[host_port] = sock   
+                        self.wtManager.workersDict[host_port] = Worker(host_port, sock)
+
+                    # Add nodes that current node does not have
+                    for host_port in data["args"]["nodesList"]:
                         # Skip if the node is the same as the current node
                         if host_port == self.p2p_server.replyAddress:
                             continue
 
-                        if self.workersManager.socketsDict.get(host_port) is None:
+                        if self.wtManager.socketsDict.get(host_port) is None:
                             sock = self.connect(host_port)
-                            self.workersManager.socketsDict[host_port] = sock    
+                            self.wtManager.socketsDict[host_port] = sock 
+                            self.wtManager.workersDict[host_port] = Worker(host_port, sock)   
                             
                 elif data["command"] == "JOIN_REQUEST":
                     host_port = data["replyAddress"]
-
                     sock = self.connect(host_port) 
-                    self.workersManager.socketsDict[host_port] = sock
+                    self.wtManager.socketsDict[host_port] = sock
+                    self.wtManager.workersDict[host_port] = Worker(host_port, sock)
 
-                    msg = P2PProtocol.join_reply(nodesList=list(self.workersManager.socketsDict.keys()))
+                    # reply with the list of nodes
+                    msg = P2PProtocol.join_reply(nodesList=list(self.wtManager.socketsDict.keys()))
                     self.send_msg(sock, msg)
 
-
                 elif data["command"] == "JOIN_REPLY":
-                    nodesList = data["args"]["nodesList"].copy() # prepare the list of nodes to send in hello message
+                    nodesList = data["args"]["nodesList"].copy() # list of nodes to send in hello message
                     nodesList.remove(self.p2p_server.replyAddress) 
                     nodesList.append(self.anchor)
 
-                    for host_port in data["args"]["nodesList"]: # [host:port, host:port, ...]
-                        
-                        # Skip if the node is the same as the current node
-                        if host_port == self.p2p_server.replyAddress:
-                            continue
-                        
-                        # print (f"Connecting to {host_port} my address is {self.p2p_server.replyAddress}")
-                        # print (f"list of sockets {data['args']['nodesList']}")
+                    # Send hello message for each node
+                    for host_port in nodesList:
 
-                        # send hello message for each node
-                        sock = self.connect(host_port) 
-                        self.workersManager.socketsDict[host_port] = sock
+                        if host_port == self.anchor:
+                            sock = self.wtManager.socketsDict.get(host_port) # already connected
+                        else:
+                            sock = self.connect(host_port) 
+                            self.wtManager.socketsDict[host_port] = sock
+                            self.wtManager.workersDict[host_port] = Worker(host_port, sock)
 
                         msg = P2PProtocol.hello(self.p2p_server.replyAddress, nodesList) 
                         self.send_msg(sock, msg)
 
-
                 elif data["command"] == "SOLVE_REQUEST":
                     task_id = data["args"]["task_id"]
-                    self.execute_task(task_id) # execute
+                    self.execute_task(task_id) # TODO: sudoku task
 
                     host_port = data["replyAddress"]
 
                     # Send the reply
-                    sock = self.workersManager.socketsDict.get(host_port)
-
+                    sock = self.wtManager.socketsDict.get(host_port)
                     msg = P2PProtocol.solve_reply(self.p2p_server.replyAddress, task_id)
                     self.send_msg(sock, msg)
                     
-                elif data["command"] == "SOLVE_REPLY": # http_tasks -> {task_id: state, ...}, state = -1: to be send, 0: send, 1: received
+                elif data["command"] == "SOLVE_REPLY":
+                    # Store the task as solved
                     task_id = data["args"]["task_id"]
-                    self.http_tasks[task_id] = 1
-
-                    next_task = self.next_task() # Find the next task_id to be send
-
-                    if next_task is not None:
-                        self.http_tasks[next_task] = 0 # sent
-
-                        host_port = data["replyAddress"]
-                        sock = self.workersManager.socketsDict.get(host_port)
-
-                        msg = P2PProtocol.solve_request(self.p2p_server.replyAddress, next_task)
-                        self.send_msg(sock, msg)    
+                    self.wtManager.finish_task(task_id) 
                         
+            if not self.isHandlingHTTP:
+                continue
+            
+            # Manage tasks assignments and timeouts (if any)    
+            
+            # check if completed
+            if self.wtManager.isDone():
+                self.isHandlingHTTP = False
+                self.http_server.response_queue.put("task done!")
+                self.logger.debug("HTTP: Task done!")
+            else:
+            # manage tasks assignments and timeouts
+                timeout_tasks = self.wtManager.checkTimeouts() # tasks that have timed out
 
-            if self.isHandlingHTTP:
-                if all(state == 1 for state in self.http_tasks.values()):
-                    self.http_server.response_queue.put("done")
-                    self.isHandlingHTTP = False
-                else:
-                    timeout_tasks = self.taskManager.checkTimeouts()
+                # Retry tasks
+                if len(timeout_tasks) > 0:
+                    for task in timeout_tasks:
+                        msg = P2PProtocol.solve_request(self.p2p_server.replyAddress, task.task_id)
+                        self.send_msg(sock=self.wtManager.socketsDict[task.worker.worker_address], msg=msg)
+                        task.retry()
+                        self.logger.debug(f"P2P: Retrying task to {task.worker.worker_address} [{task.worker.ema_response_time}]")
+     
+                tasks_to_work = self.wtManager.get_tasks_to_work() # Get new tasks with associated workers
 
-                    # Retry tasks
-                    if len(timeout_tasks) > 0:
-                        for task in timeout_tasks:
-                            msg = P2PProtocol.solve_request(self.p2p_server.replyAddress, task.task_id)
-                            self.send_msg(self.workersManager.socketsDict[task.worker_address], msg)
-                            task.retry()
-
-                    # new_tasks = self.taskManager.get_tasks_to_work() # Get new tasks with associated workers
-
-                    # # Assign new tasks
-                    # for task in new_tasks:
-                    #     msg = P2PProtocol.solve_request(self.p2p_server.replyAddress, task.task_id)
-                    #     self.send_msg(self.workersManager.socketsDict[task.worker_address], msg)
-
-                    #     self.taskManager.add_working_task(task)
+                # Assign new tasks
+                for task in tasks_to_work:
+                    msg = P2PProtocol.solve_request(self.p2p_server.replyAddress, task.task_id)
+                    self.send_msg(sock=self.wtManager.socketsDict[task.worker.worker_address], msg=msg)
+                    self.logger.debug(f"P2P: Assigning task {task.task_id} to {task.worker.worker_address} [{task.worker.ema_response_time}]")
 
 
                     
+    # next_task = self.next_task() # Find the next task_id to be send
+
+    # if next_task is not None:
+    #     self.http_tasks[next_task] = 0 # sent
+
+    #     host_port = data["replyAddress"]
+    #     sock = self.wtManager.socketsDict.get(host_port)
+
+    #     msg = P2PProtocol.solve_request(self.p2p_server.replyAddress, next_task)
+    #     self.send_msg(sock, msg)   
