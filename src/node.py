@@ -3,11 +3,11 @@ import time
 import socket
 import queue
 import pickle
+from src.p2p_loadbalancer import WorkersManager, TaskManager
 from src.p2p_server import P2PServerThread
 from src.http_server import HTTPServerThread
 from src.utils.logger import Logger
 from src.p2p_protocol import P2PProtocol 
-
 
 class Node:
     def __init__(self, host, http_port, p2p_port, anchor, handicap):
@@ -18,15 +18,15 @@ class Node:
 
         self.stats = {"all" : {"solved": 0, "validations": 0}, "nodes": []}
         self.network = {}
-        self.socketsDict = {} # {'host:port': socket}
         
         self.http_tasks = {} 
         self.isHandlingHTTP = False
 
         self.http_server = HTTPServerThread(self.logger, host, http_port, self.stats, self.network)
-        self.p2p_server = P2PServerThread(self.logger, host, p2p_port, handicap, self.socketsDict)
+        self.p2p_server = P2PServerThread(self.logger, host, p2p_port, handicap)
 
-        
+        self.workersManager = WorkersManager()
+        self.taskManager = TaskManager(self.workersManager)
 
 
     def connect(self, host_port):
@@ -72,7 +72,7 @@ class Node:
         # Connect to anchor (if any)
         if self.anchor:
             sock = self.connect(self.anchor) # create connection and store in socketsDict
-            self.socketsDict[self.anchor] = sock
+            self.workersManager.socketsDict[self.anchor] = sock
             
             msg = P2PProtocol.join_request(self.p2p_server.replyAddress)
             self.send_msg(sock, msg)
@@ -91,7 +91,7 @@ class Node:
                 self.logger.debug(f"HTTP: {http_response}")
                 
                 task_id = 0
-                for sock in self.socketsDict.values():
+                for sock in self.workersManager.socketsDict.values():
                     self.http_tasks[task_id] = 0 # sent
                       
                     msg = P2PProtocol.solve_request(self.p2p_server.replyAddress, task_id)
@@ -110,10 +110,10 @@ class Node:
                 self.logger.debug(f"P2P-received: {data['command']}")
                 
                 if data["command"] == "HELLO":
-                    if self.socketsDict.get(data["replyAddress"]) is None:
+                    if self.workersManager.socketsDict.get(data["replyAddress"]) is None:
                         host_port = data["replyAddress"]
                         sock = self.connect(host_port)
-                        self.socketsDict[host_port] = sock   
+                        self.workersManager.socketsDict[host_port] = sock   
 
                     for host_port in data["args"]["nodesList"]: # [host:port, host:port, ...]
                         
@@ -121,17 +121,17 @@ class Node:
                         if host_port == self.p2p_server.replyAddress:
                             continue
 
-                        if self.socketsDict.get(host_port) is None:
+                        if self.workersManager.socketsDict.get(host_port) is None:
                             sock = self.connect(host_port)
-                            self.socketsDict[host_port] = sock    
+                            self.workersManager.socketsDict[host_port] = sock    
                             
                 elif data["command"] == "JOIN_REQUEST":
                     host_port = data["replyAddress"]
 
                     sock = self.connect(host_port) 
-                    self.socketsDict[host_port] = sock
+                    self.workersManager.socketsDict[host_port] = sock
 
-                    msg = P2PProtocol.join_reply(nodesList=list(self.socketsDict.keys()))
+                    msg = P2PProtocol.join_reply(nodesList=list(self.workersManager.socketsDict.keys()))
                     self.send_msg(sock, msg)
 
 
@@ -151,7 +151,7 @@ class Node:
 
                         # send hello message for each node
                         sock = self.connect(host_port) 
-                        self.socketsDict[host_port] = sock
+                        self.workersManager.socketsDict[host_port] = sock
 
                         msg = P2PProtocol.hello(self.p2p_server.replyAddress, nodesList) 
                         self.send_msg(sock, msg)
@@ -164,7 +164,7 @@ class Node:
                     host_port = data["replyAddress"]
 
                     # Send the reply
-                    sock = self.socketsDict.get(host_port)
+                    sock = self.workersManager.socketsDict.get(host_port)
 
                     msg = P2PProtocol.solve_reply(self.p2p_server.replyAddress, task_id)
                     self.send_msg(sock, msg)
@@ -179,7 +179,7 @@ class Node:
                         self.http_tasks[next_task] = 0 # sent
 
                         host_port = data["replyAddress"]
-                        sock = self.socketsDict.get(host_port)
+                        sock = self.workersManager.socketsDict.get(host_port)
 
                         msg = P2PProtocol.solve_request(self.p2p_server.replyAddress, next_task)
                         self.send_msg(sock, msg)    
@@ -190,7 +190,23 @@ class Node:
                     self.http_server.response_queue.put("done")
                     self.isHandlingHTTP = False
                 else:
-                    pass
-                    # TODO: checkTimeout()
+                    timeout_tasks = self.taskManager.checkTimeouts()
+
+                    # Retry tasks
+                    if len(timeout_tasks) > 0:
+                        for task in timeout_tasks:
+                            msg = P2PProtocol.solve_request(self.p2p_server.replyAddress, task.task_id)
+                            self.send_msg(self.workersManager.socketsDict[task.worker_address], msg)
+                            task.retry()
+
+                    # new_tasks = self.taskManager.get_tasks_to_work() # Get new tasks with associated workers
+
+                    # # Assign new tasks
+                    # for task in new_tasks:
+                    #     msg = P2PProtocol.solve_request(self.p2p_server.replyAddress, task.task_id)
+                    #     self.send_msg(self.workersManager.socketsDict[task.worker_address], msg)
+
+                    #     self.taskManager.add_working_task(task)
+
 
                     
