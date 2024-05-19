@@ -8,8 +8,7 @@ class P2PServerThread(Thread):
     def __init__(self, logger, host, port, handicap, socketsDict):
         Thread.__init__(self)
         self.logger = logger
-        self._host = host
-        self._port = port
+        self.replyAddress = f"{host}:{port}"
         self.socketsDict = socketsDict
         
         self.handicap = handicap
@@ -21,14 +20,14 @@ class P2PServerThread(Thread):
         
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._socket.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1) # Reuse address
-        self._socket.bind((self._host, self._port))
+        self._socket.bind((host, port))
         self._socket.listen(100)
         self._socket.setblocking(False)
 
     def run(self):
         """Run until canceled."""
 
-        self.logger.info("P2P Server started %s:%s" % (self._host, self._port))
+        self.logger.info(f"P2P Server started {self.replyAddress}")
         self.selector.register(self._socket, selectors.EVENT_READ, self.handle_new_connection)
 
         while True:
@@ -48,10 +47,7 @@ class P2PServerThread(Thread):
         # Client socket
         socket.setblocking(False)
 
-        host = addr[0]
-        port = addr[1]
-        self.logger.critical(f"New connection from {host}:{port}")
-        self.socketsDict[host + "-" + str(port)] = socket # THREAD SAFE?
+        self.logger.debug(f"P2P: New connection from {addr}")
 
         # Handle future data from this client  
         self.selector.register(socket, mask, self.handle_requests)              
@@ -67,8 +63,8 @@ class P2PServerThread(Thread):
             sock.close()
             return
         
-        self.logger.debug(f"Received message {message} from {sock.getpeername()}")
+        #self.logger.debug(f"Received message {message} from {sock.getpeername()}")
 
-        self.request_queue.put((message, sock.getpeername()))
+        self.request_queue.put(message)
 
 

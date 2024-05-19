@@ -4,25 +4,26 @@ import pickle
 class Message:
     """Message Type."""
 
-    def __init__(self, command: str):
+    def __init__(self, command: str, replyAddress: str = None):
         self.data = {"command":command}
+        if replyAddress is not None:
+            self.data["replyAddress"] = replyAddress
 
     def to_bytes(self) -> bytes:
-        print(self.data)
         return pickle.dumps(self.data)
 
 class HelloMessage(Message):
     """Message to say hello to the P2P network."""
 
-    def __init__(self, nodesList: list):
-        super().__init__("HELLO")
+    def __init__(self, replyAddress: str, nodesList: list):
+        super().__init__("HELLO", replyAddress)
         self.data["args"] = {"nodesList": nodesList}
 
 class JoinRequestMessage(Message):
     """Message to join the P2P network."""
     
-    def __init__(self):
-        super().__init__("JOIN_REQUEST")
+    def __init__(self, replyAddress: str):
+        super().__init__("JOIN_REQUEST", replyAddress)
 
 class JoinReplyMessage(Message):
     """Message to replay to a joining node."""
@@ -34,30 +35,30 @@ class JoinReplyMessage(Message):
 class SolveRequestMessage(Message):
     """Message to request to solve a task."""
     
-    def __init__(self, task_id: int):
-        super().__init__("SOLVE_REQUEST")
-        self.data["task"] = task_id
+    def __init__(self, replyAddress:str, task_id: int):
+        super().__init__("SOLVE_REQUEST", replyAddress)
+        self.data["args"] = {"task_id": task_id}
 
 class SolveReplyMessage(Message):
     """Message to reply a solve request."""
     
-    def __init__(self, task_id: int):
-        super().__init__("SOLVE_REPLY")
-        self.data["task"] = task_id
+    def __init__(self, replyAddress: str, task_id: int):
+        super().__init__("SOLVE_REPLY", replyAddress)
+        self.data["args"] = {"task_id": task_id}
 
 
 class P2PProtocol:
     """P2P Protocol."""
     
     @classmethod
-    def hello(cls, nodesList: list) -> HelloMessage:
+    def hello(cls, replyAddress: str, nodesList: list) -> HelloMessage:
         """Creates a HelloMessage object."""
-        return HelloMessage(nodesList)
+        return HelloMessage(replyAddress, nodesList)
     
     @classmethod
-    def join_request(cls) -> JoinRequestMessage:
+    def join_request(cls, replyAddress: str) -> JoinRequestMessage:
         """Creates a JoinRequestMessage object."""
-        return JoinRequestMessage()
+        return JoinRequestMessage(replyAddress)
 
     @classmethod
     def join_reply(cls, nodesList: list) -> JoinReplyMessage:
@@ -65,14 +66,14 @@ class P2PProtocol:
         return JoinReplyMessage(nodesList)
 
     @classmethod
-    def solve_request(cls, task_id: int) -> SolveRequestMessage:
+    def solve_request(cls, replyAddress: str,task_id: int) -> SolveRequestMessage:
         """Creates a SolveRequestMessage object."""
-        return SolveRequestMessage(task_id)
+        return SolveRequestMessage(replyAddress, task_id)
     
     @classmethod
-    def solve_reply(cls, task_id: int) -> SolveRequestMessage:
+    def solve_reply(cls, replyAddress: str, task_id: int) -> SolveRequestMessage:
         """Creates a SolveRequestMessage object."""
-        return SolveRequestMessage(task_id)
+        return SolveReplyMessage(replyAddress, task_id)
 
 
     @classmethod
@@ -107,16 +108,16 @@ class P2PProtocol:
         
         command = data.get("command") 
 
-        if command == "JOIN_REQUEST":
-            return JoinRequestMessage()
+        if command == "HELLO":
+            return HelloMessage(data["replyAddress"], data["args"]["nodesList"])
+        elif command == "JOIN_REQUEST":
+            return JoinRequestMessage(data["replyAddress"])
         elif command == "JOIN_REPLY":
             return JoinReplyMessage(data["args"]["nodesList"])
-        elif command == "HELLO":
-            return HelloMessage(data["args"]["nodesList"])
         elif command == "SOLVE_REQUEST":
-            return SolveRequestMessage(data["task"])
+            return SolveRequestMessage(data["replyAddress"], data["args"]["task_id"])
         elif command == "SOLVE_REPLY":
-            return SolveReplyMessage(data["task"])
+            return SolveReplyMessage(data["replyAddress"], data["args"]["task_id"])
         else:
             raise P2PProtocolBadFormat(received)
 
