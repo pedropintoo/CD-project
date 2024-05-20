@@ -39,7 +39,7 @@ class Worker:
         # Recalculate
         now = time.time()
         elapsed_time = (now - self.last_signal)
-        if elapsed_time > self.ema_response_time*2: # TODO: thing about this limit value
+        if elapsed_time > 10: # TODO: thing about this limit value
             self.Alive = False
         
         return self.Alive
@@ -128,7 +128,10 @@ class WTManager:
         """Kill a worker."""
         worker = self.workersDict.get(host_port)
         worker.crash()
+        if worker.socket is not None:
+            worker.socket.close()
         worker.socket = None
+        
         tasks = list(self.working_tasks.values()).copy()
         for task in tasks:
             if task.worker == worker:
@@ -141,8 +144,8 @@ class WTManager:
 
     def checkWorkersTimeouts(self):
         """Check for workers that not make signal of aliveness and handle retries."""
-        for worker in list(self.workersDict.values()):
-            if not worker.isAlive():
+        for worker in self.get_alive_workers():
+            if not worker.isAlive() and not worker.socket is not None:
                 self.kill_worker(worker.worker_address)
 
     def checkTasksTimeouts(self) -> list[Task]:
@@ -196,6 +199,7 @@ class WTManager:
                 self.pending_tasks_queue.remove(task_id)
             else:
                 break
+
         return new_tasks
 
 

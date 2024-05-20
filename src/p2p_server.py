@@ -47,7 +47,7 @@ class P2PServerThread(Thread):
         self.logger.debug(f"P2P: New connection from {addr}")
 
         # Handle future data from this client  
-        self.selector.register(socket, mask, self.handle_requests)              
+        self.selector.register(socket, mask, self.handle_requests)  
         
     def handle_requests(self, sock, mask):
         """Handle incoming data."""

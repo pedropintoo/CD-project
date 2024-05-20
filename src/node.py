@@ -24,7 +24,7 @@ class Node:
         self.handicap = handicap
 
         self.last_hello = time.time()
-        self.TIME_TO_HELLO = 2 # in seconds
+        self.TIME_TO_HELLO = 1 # in seconds
 
         self.http_server = HTTPServerThread(self.logger, host, http_port, self.stats, self.network)
         self.p2p_server = P2PServerThread(self.logger, host, p2p_port)
@@ -137,8 +137,8 @@ class Node:
                         self.wtManager.workersDict[host_port] = Worker(host_port, sock)
                     else:
                         worker = self.wtManager.workersDict[host_port]
-                        if not worker.isAlive():
-                            worker.socket = self.connect(host_port)
+                        # if not worker.isAlive():
+                        #     worker.socket = self.connect(host_port)
                         
                         worker.alive_signal()
 
