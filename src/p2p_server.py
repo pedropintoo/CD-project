@@ -2,31 +2,29 @@ import socket
 import selectors
 from threading import Thread
 from queue import Queue
+from src.p2p_protocol import P2PProtocol
 
 class P2PServerThread(Thread):
-    def __init__(self, logger, host, port, anchor, handicap):
+    def __init__(self, logger, host, port):
         Thread.__init__(self)
         self.logger = logger
-        self._host = host
-        self._port = port
-
-        self.anchor = anchor
-        self.handicap = handicap
-        self.selector = selectors.DefaultSelector()
-
+        self.replyAddress = f"{host}:{port}"
+                
         # Generate request p2p queue
         self.request_queue = Queue()
+
+        self.selector = selectors.DefaultSelector()
         
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._socket.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1) # Reuse address
-        self._socket.bind((self._host, self._port))
+        self._socket.bind((host, port))
         self._socket.listen(100)
         self._socket.setblocking(False)
 
     def run(self):
         """Run until canceled."""
 
-        self.logger.info("P2P Server started %s:%s" % (self._host, self._port))
+        self.logger.info(f"P2P Server started {self.replyAddress}")
         self.selector.register(self._socket, selectors.EVENT_READ, self.handle_new_connection)
 
         while True:
@@ -37,37 +35,33 @@ class P2PServerThread(Thread):
                 callback = key.data
                 callback(key.fileobj, mask)   
 
-    def connect(self, host, port):
-        """Connect to a peer."""
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.logger.debug(f"Connecting to {host}:{port}")
-            sock.connect((host, int(port)))
-            sock.setblocking(False)
-            self.selector.register(sock, selectors.EVENT_READ, self.handle_requests)
-            return sock
-        except Exception as e:
-            self.logger.error(f"Failed to connect to {host}:{port}. {e}")
-            return None
 
     ############## Handlers ##############      
 
     def handle_new_connection(self, sock, mask):
-        """Handle new client connection."""
-        conn, addr = sock.accept()
+        """Handle new client socket."""
+        socket, addr = sock.accept()
         # Client socket
-        conn.setblocking(False)
+        socket.setblocking(False)
+
+        self.logger.debug(f"P2P: New connection from {addr}")
 
         # Handle future data from this client  
-        self.selector.register(conn, mask, self.handle_requests)              
+        self.selector.register(socket, mask, self.handle_requests)  
         
-    def handle_requests(self, conn, mask):
+    def handle_requests(self, sock, mask):
         """Handle incoming data."""
-        data = conn.recv(1024)
-        if data:
-            self.logger.debug(f"Received {data} from {conn.getpeername()}")
-            self.request_queue.put({"conn": conn, "data": data})
-        else:
-            self.sel.unregister(conn)
-            conn.close()
+        message = P2PProtocol.recv_msg(sock)
+        
+        # Client disconnected
+        if message == None:
+            self.logger.debug(f"Client {sock.getpeername()} disconnected.")
+            self.selector.unregister(sock)
+            sock.close()
+            return
+        
+        #self.logger.debug(f"Received message {message} from {sock.getpeername()}")
+
+        self.request_queue.put(message)
+
 
