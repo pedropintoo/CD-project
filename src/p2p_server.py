@@ -5,13 +5,11 @@ from queue import Queue
 from src.p2p_protocol import P2PProtocol
 
 class P2PServerThread(Thread):
-    def __init__(self, logger, host, port, handicap):
+    def __init__(self, logger, host, port):
         Thread.__init__(self)
         self.logger = logger
         self.replyAddress = f"{host}:{port}"
-        
-        self.handicap = handicap
-        
+                
         # Generate request p2p queue
         self.request_queue = Queue()
 

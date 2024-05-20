@@ -8,11 +8,13 @@ class Worker:
         self.socket = socket
 
         # availability
-        self.available = True
+        self.last_signal = time.time()
+        self.Alive = True
+        self.isAvailable = True
         self.isTheFirstResponse = True
 
         # response time
-        self.ema_response_time = 0.0  # Exponential Moving Average response time
+        self.ema_response_time = 10.0  # Exponential Moving Average response time
         self.smoothing_factor = smoothing_factor # TODO: increase when worker gets older (more stable)
 
 
@@ -25,22 +27,44 @@ class Worker:
             self.ema_response_time = (self.smoothing_factor * response_time +
                                       (1 - self.smoothing_factor) * self.ema_response_time)
 
+    def alive_signal(self):  
+        """Worker give signs of aliveness.""" 
+        self.Alive = True
+        self.last_signal = time.time()
+
+    def isAlive(self):
+        if self.Alive == False:
+            return False
+
+        # Recalculate
+        now = time.time()
+        elapsed_time = (now - self.last_signal)
+        if elapsed_time > self.ema_response_time*2: # TODO: thing about this limit value
+            self.Alive = False
+        
+        return self.Alive
+    
+    def crash(self):
+        """Crash the worker -> worker is not alive."""
+        self.Alive = False
+        self.isAvailable = True # for future reconnection
+
+
 
 class Task:
-    def __init__(self, task_id: int, worker: Worker, time_limit: int = 10, tries_limit: int = 3):
+    def __init__(self, task_id: int, worker: Worker, tries_limit: int = 1):
         self.task_id = task_id
         self.worker = worker
-        worker.available = False
+        worker.isAvailable = False
         self.start_time = time.time()
         self.tries = 0
         
         # Limit parameters
-        self.time_limit = time_limit
         self.tries_limit = tries_limit
 
     def has_timed_out(self) -> bool:
         """Check if the task has exceeded its time limit."""
-        return time.time() - self.start_time > self.time_limit
+        return time.time() - self.start_time > (self.worker.ema_response_time*2)
 
     def has_exceeded_tries(self) -> bool:
         """Check if the task has exceeded its retry limit."""
@@ -55,9 +79,10 @@ class Task:
         
     def end(self):
         """End the task."""
-        self.worker.available = True
+        self.worker.isAvailable = True
         now = time.time()
         self.worker.update_ema_response_time( now - self.start_time )
+
 
 # Workers & Tasks Manager (load balancer)
 class WTManager:
@@ -77,9 +102,15 @@ class WTManager:
     def finish_task(self, task_id: int):
         """Remove a task from the working list."""
         task = self.working_tasks.get(int(task_id))
+        
         if task is not None:
             task.end() # update worker
             del self.working_tasks[task_id]
+        else:
+            try:
+                self.pending_tasks_queue.remove(task_id) # done by someone that was dead
+            except ValueError:
+                pass 
 
     def isDone(self) -> bool:
         """Check if all tasks are done."""
@@ -93,30 +124,62 @@ class WTManager:
         """Check if there are working tasks."""
         return len(self.working_tasks) > 0
 
+    def kill_worker(self, host_port: str):
+        """Kill a worker."""
+        worker = self.workersDict.get(host_port)
+        worker.crash()
+        worker.socket = None
+        tasks = list(self.working_tasks.values()).copy()
+        for task in tasks:
+            if task.worker == worker:
+                self.unassign_task(task)
+
     def unassign_task(self, task: Task):
         """Remove a task from the working list and add it back to the pending queue."""
-        task.end() # update worker
         self.pending_tasks_queue.append(task.task_id)
         del self.working_tasks[task.task_id]
 
-    def checkTimeouts(self) -> list[Task]:
-        """Check for tasks that have timed out and handle retries."""
-        timeout_tasks = []
+    def checkWorkersTimeouts(self):
+        """Check for workers that not make signal of aliveness and handle retries."""
+        for worker in list(self.workersDict.values()):
+            if not worker.isAlive():
+                self.kill_worker(worker.worker_address)
 
+    def checkTasksTimeouts(self) -> list[Task]:
+        """Check for tasks that have timed out and handle retries."""        
+        # tasks
+        timeout_tasks = []
         for task in list(self.working_tasks.values()):
             if task.has_timed_out():
                 if task.has_exceeded_tries():
+                    # task expired
                     self.unassign_task(task) # add to pending queue
                 else:
                     timeout_tasks.append(task) # client must retry !!
 
         return timeout_tasks   
 
+    def get_alive_workers_address(self) -> List[str]:
+        """Get the list of alive workers addresses."""
+        alive_workers = []
+        for worker in self.workersDict.values():
+            if worker.Alive:
+                alive_workers.append(worker.worker_address)
+        return alive_workers
+
+    def get_alive_workers(self) -> List[Worker]:
+        """Get the list of alive workers."""
+        alive_workers = []
+        for worker in self.workersDict.values():
+            if worker.Alive:
+                alive_workers.append(worker)
+        return alive_workers
+
     def get_best_worker(self) -> Worker:
         """Get the worker with the lowest EMA response time."""
         best_worker = None
-        for worker in self.workersDict.values():
-            if worker.available and (best_worker is None or worker.ema_response_time < best_worker.ema_response_time):
+        for worker in self.get_alive_workers():
+            if worker.isAvailable and (best_worker is None or worker.ema_response_time < best_worker.ema_response_time):
                 best_worker = worker
         return best_worker
 
@@ -134,6 +197,8 @@ class WTManager:
             else:
                 break
         return new_tasks
+
+
 
     
 

@@ -11,7 +11,7 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--http_port", type=int, help="HTTP port to listen on", default=8000)
     parser.add_argument("-s", "--p2p_port", type=int, help="P2P port to listen on", default=7000)
     parser.add_argument("-a", "--anchor", type=str, help="Anchor P2P node to connect to", default=None)
-    parser.add_argument("-d", "--handicap", type=int, help="Handicap for the node", default=0)
+    parser.add_argument("-d", "--handicap", type=float, help="Handicap for the node", default=0)
     parser.add_argument("-l", "--localhost", action="store_true", help="Run on localhost", default=False)
 
     args = parser.parse_args()
