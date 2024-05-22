@@ -10,10 +10,10 @@ class Sudoku:
     def _limit_calls(self, base_delay=0.01, interval=10, threshold=5):
         current_time = time.time()
         self.recent_requests.append(current_time)
-        num_requests = len([t for t in self.recent_requests if current_time - t < 10])
+        num_requests = len([t for t in self.recent_requests if current_time - t < interval])
 
-        if num_requests > 5:
-            delay = 0.01 * (num_requests - 5 + 1)
+        if num_requests > threshold:
+            delay = base_delay * (num_requests - threshold + 1)
             time.sleep(delay)
 
     def __str__(self):
