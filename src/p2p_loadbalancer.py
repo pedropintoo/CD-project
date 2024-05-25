@@ -12,12 +12,9 @@ class Worker:
         self.isAvailable = True # false when worker is working
 
         # hello response time
-        self.isFirstHello = True
         self.last_hello_received = time.time()
-        self.hello_response_time = 10.0  # Exponential Moving Average response time 
 
         # task response time
-        self.isFirstTask = True
         self.last_task_sended = time.time()
         self.task_response_time = 10.0   # Exponential Moving Average response time
 
@@ -32,54 +29,42 @@ class Worker:
     def hello_received(self):  
         """Worker give signs of aliveness.""" 
         self.Alive = True
-        self.update_hello_response_time()
+        self.last_hello_received = time.time()
 
     def task_done(self):  
         """Worker give signs of aliveness.""" 
         self.isAvailable = True
         self.update_task_response_time()
 
-    def update_hello_response_time(self):
-        """Update the hello response time given a new response."""
-        elapsed_time = time.time() - self.last_hello_received
-        if self.isFirstHello:
-            self.hello_response_time = elapsed_time
-            self.isFirstHello = False
-        else:
-            self.hello_response_time = (self.smoothing_factor * elapsed_time +
-                                      (1 - self.smoothing_factor) * self.hello_response_time)
-    
+
     def update_task_response_time(self):
         """Update the task response time given a new response."""
-        elapsed_time = time.time() - self.last_hello_received
-        if self.isFirstTask:
-            self.task_response_time = elapsed_time
-            self.isFirstTask = False
-        else:
-            self.task_response_time = (self.smoothing_factor * elapsed_time +
-                                      (1 - self.smoothing_factor) * self.task_response_time)
+        elapsed_time = time.time() - self.last_task_sended
+        self.last_task_sended = time.time()
+        self.task_response_time = (self.smoothing_factor * elapsed_time +
+                                    (1 - self.smoothing_factor) * self.task_response_time)
+        
 
-    def checkHelloTimeout(self):
+    def isHelloTimeout(self):
         if self.Alive == False:
-            return False
+            return True
 
         # Recalculate
-        elapsed_time = time.time() - self.last_signal
-        if elapsed_time > 5 * self.hello_response_time: # TODO: thing about this limit value
+        elapsed_time = time.time() - self.last_hello_received
+        if elapsed_time > 5: # TODO: thing about this limit value
             self.Alive = False
-        
-        return self.Alive
+
+        return not self.Alive
     
-    def checkTaskTimeout(self):
+    def isTaskTimeout(self):
         elapsed_time = time.time() - self.last_task_sended
-        return elapsed_time > 2 * self.task_response_time
+        return elapsed_time > 10 * self.task_response_time
 
     def crash(self):
         """Crash the worker"""
         self.Alive = False
         self.isAvailable = True # for future reconnection
-        self.last_hello_received = time.time()
-        self.last_task_sended = time.time()
+        self.update_task_response_time()
 
 
 class Task:
@@ -95,7 +80,7 @@ class Task:
 
     def has_timed_out(self) -> bool:
         """Check if the task has exceeded its time limit."""
-        return not self.worker.Alive or self.worker.checkTaskTimeout()
+        return not self.worker.Alive or self.worker.isTaskTimeout()
 
     def has_exceeded_tries(self) -> bool:
         """Check if the task has exceeded its retry limit."""
@@ -108,7 +93,7 @@ class Task:
 
 # Workers & Tasks Manager (load balancer)
 class WTManager:
-    def __init__(self):
+    def __init__(self, logger):
         # workers manager
         self.workersDict: Dict[str, Worker] = {}
 
@@ -116,9 +101,17 @@ class WTManager:
         self.pending_tasks_queue: List[int] = []
         self.working_tasks: Dict[int, Task] = {}
 
+        self.logger = logger
+
     def add_pending_task(self, task_id: int):
         """Add a task to the pending queue."""
         self.pending_tasks_queue.append(task_id)
+
+    def add_worker(self, host_port: str, socket: socket) -> Worker:
+        """Add a worker to the workers list."""
+        worker = Worker(host_port, socket)
+        self.workersDict[host_port] = worker
+        return worker
 
     def finish_task(self, task_id: int):
         """Remove a task from the working list."""
@@ -182,8 +175,9 @@ class WTManager:
     def checkWorkersHelloTimeouts(self):
         """Check for workers that have timed out."""
         for worker in self.get_alive_workers():
-            if not worker.checkAlive():
+            if worker.isHelloTimeout():
                 # we do not kill the socket! we just mark the worker as dead
+                self.logger.warning(f"Worker {worker.worker_address} is sleeping.")
                 self.kill_worker(worker.worker_address, close_socket=False)
 
     def checkTasksTimeouts(self) -> list[Task]:
@@ -198,14 +192,15 @@ class WTManager:
                     self.unassign_task(task) # add to pending queue
                 else:
                     retry_tasks.append(task) # client must retry !!
+                    task.retry()
 
         return retry_tasks   
 
     def get_best_worker(self) -> Worker:
-        """Get the worker with the lowest EMA response time."""
+        """Get the worker with the lowest task response time."""
         best_worker = None
         for worker in self.get_ready_workers():
-            if best_worker is None or worker.ema_response_time < best_worker.ema_response_time: # TODO: worker response time! 
+            if best_worker is None or worker.task_response_time < best_worker.task_response_time: # TODO: worker response time! 
                 best_worker = worker
         return best_worker
 
