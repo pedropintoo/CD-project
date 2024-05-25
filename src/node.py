@@ -64,7 +64,7 @@ class Node:
             self.logger.debug(f"P2P-sent: {msg.data['command']}")  
         except Exception as e:
             self.logger.error(f"Failed to send message to {host_port}.")
-            self.wtManager.kill_worker(host_port)    
+            self.wtManager.kill_worker(host_port) # the worker is dead
 
     # request is {'command': 'SOLVE_REQUEST', 'task': task_id}
     def execute_task(self, task_id):
@@ -137,7 +137,7 @@ class Node:
                         self.wtManager.workersDict[host_port] = Worker(host_port, sock)
                     else:
                         worker = self.wtManager.workersDict[host_port]
-                        # if not worker.isAlive():
+                        # if not worker.checkAlive():
                         #     worker.socket = self.connect(host_port)
                         
                         worker.alive_signal()

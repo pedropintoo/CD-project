@@ -32,7 +32,7 @@ class Worker:
         self.Alive = True
         self.last_signal = time.time()
 
-    def isAlive(self):
+    def checkAlive(self):
         if self.Alive == False:
             return False
 
@@ -123,23 +123,30 @@ class WTManager:
         """Check if there are working tasks."""
         return len(self.working_tasks) > 0
 
-    def kill_worker(self, host_port: str):
+    def kill_worker(self, host_port: str, close_socket = True):
         """Kill a worker."""
         worker = self.workersDict.get(host_port)
         worker.crash()
-        if worker.socket is not None:
+
+        # close the socket if needed
+        if close_socket:
             worker.socket.close()
-        worker.socket = None
+            worker.socket = None
         
+        # unsign every task of the dead worker
         tasks = list(self.working_tasks.values()).copy()
         for task in tasks:
             if task.worker == worker:
-                self.unassign_task(task)
+                self.unassign_task(task) 
 
     def unassign_task(self, task: Task):
         """Remove a task from the working list and add it back to the pending queue."""
         self.pending_tasks_queue.append(task.task_id)
         del self.working_tasks[task.task_id]
+
+    def get_ready_workers(self) -> List[Worker]:
+        """Get the list of ready workers."""
+        return [worker for worker in self.workersDict.values() if worker.isAvailable and worker.Alive]
 
     def get_alive_workers(self) -> List[Worker]:
         """Get the list of alive workers."""
@@ -152,15 +159,16 @@ class WTManager:
     def checkWorkersTimeouts(self):
         """Check for workers that not make signal of aliveness and handle retries."""
         for worker in self.get_alive_workers():
-            if not worker.isAlive() and not worker.socket is not None:
-                self.kill_worker(worker.worker_address)
+            if not worker.checkAlive():
+                # we do not kill the socket
+                self.kill_worker(worker.worker_address, close_socket=False)
 
     def checkTasksTimeouts(self) -> list[Task]:
         """Check for tasks that have timed out and handle retries."""        
         # tasks
         timeout_tasks = []
         for task in list(self.working_tasks.values()):
-            if task.has_timed_out():
+            if task.has_timed_out(): # TODO: worker response timeout!
                 if task.has_exceeded_tries():
                     # task expired
                     self.unassign_task(task) # add to pending queue
@@ -172,8 +180,8 @@ class WTManager:
     def get_best_worker(self) -> Worker:
         """Get the worker with the lowest EMA response time."""
         best_worker = None
-        for worker in self.get_alive_workers():
-            if worker.isAvailable and (best_worker is None or worker.ema_response_time < best_worker.ema_response_time):
+        for worker in self.get_ready_workers():
+            if best_worker is None or worker.ema_response_time < best_worker.ema_response_time: # TODO: worker response time! 
                 best_worker = worker
         return best_worker
 
@@ -189,7 +197,7 @@ class WTManager:
                 self.working_tasks[task_id] = task
                 self.pending_tasks_queue.remove(task_id)
             else:
-                break
+                break # no more workers available
 
         return new_tasks
 
