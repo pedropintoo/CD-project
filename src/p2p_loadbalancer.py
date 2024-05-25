@@ -209,19 +209,18 @@ class WTManager:
                 best_worker = worker
         return best_worker
 
-    def get_tasks_to_work(self) -> List[Task]:
+    def get_tasks_to_send(self) -> List[Task]:
         """Get new tasks with associated workers."""
         new_work_tasks = []
         pending = self.pending_tasks_queue.copy()
-        for task_id in pending:
-            worker = self.get_best_worker()
-            if worker is not None:
-                task = Task(task_id, worker)
-                new_work_tasks.append(task)
-                self.working_tasks[task_id] = task
-                self.pending_tasks_queue.remove(task_id)
-            else:
-                break # no more workers available
+
+        worker = self.get_best_worker() # if None: no workers available
+        
+        while self.has_pending_tasks() and worker is not None:
+            task_id = self.pending_tasks_queue.pop(0)
+            task = Task(task_id, worker)
+            new_work_tasks.append(task)
+            self.working_tasks[task_id] = task
 
         return new_work_tasks
 
