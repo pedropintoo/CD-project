@@ -14,7 +14,7 @@ class Worker:
         self.isTheFirstResponse = True
 
         # response time
-        self.ema_response_time = 10.0  # Exponential Moving Average response time
+        self.ema_response_time = 10.0  # Exponential Moving Average response time TODO: this initial value is arbitrary!
         self.smoothing_factor = smoothing_factor # TODO: increase when worker gets older (more stable)
 
 
@@ -74,7 +74,7 @@ class Task:
         """Increment the number of tries and reset the start time."""
         self.tries += 1
         now = time.time()
-        self.worker.update_ema_response_time( now - self.start_time )
+        #self.worker.update_ema_response_time( now - self.start_time )
         self.start_time = now   
         
     def end(self):
@@ -88,7 +88,6 @@ class Task:
 class WTManager:
     def __init__(self):
         # workers manager
-        self.socketsDict: Dict[str, socket] = {} # {'host:port': socket}
         self.workersDict: Dict[str, Worker] = {}
 
         # tasks manager
@@ -101,14 +100,14 @@ class WTManager:
 
     def finish_task(self, task_id: int):
         """Remove a task from the working list."""
-        task = self.working_tasks.get(int(task_id))
+        task = self.working_tasks.get(int(task_id)) 
         
         if task is not None:
             task.end() # update worker
             del self.working_tasks[task_id]
         else:
             try:
-                self.pending_tasks_queue.remove(task_id) # done by someone that was dead
+                self.pending_tasks_queue.remove(task_id) # the responser is a dead worker TODO: actualize the worker!!!
             except ValueError:
                 pass 
 
@@ -142,6 +141,14 @@ class WTManager:
         self.pending_tasks_queue.append(task.task_id)
         del self.working_tasks[task.task_id]
 
+    def get_alive_workers(self) -> List[Worker]:
+        """Get the list of alive workers."""
+        return [worker for worker in self.workersDict.values() if worker.Alive]
+    
+    def get_alive_workers_address(self) -> List[str]:
+        """Get the list of alive workers addresses."""
+        return [worker.worker_address for worker in self.get_alive_workers()]
+
     def checkWorkersTimeouts(self):
         """Check for workers that not make signal of aliveness and handle retries."""
         for worker in self.get_alive_workers():
@@ -161,22 +168,6 @@ class WTManager:
                     timeout_tasks.append(task) # client must retry !!
 
         return timeout_tasks   
-
-    def get_alive_workers_address(self) -> List[str]:
-        """Get the list of alive workers addresses."""
-        alive_workers = []
-        for worker in self.workersDict.values():
-            if worker.Alive:
-                alive_workers.append(worker.worker_address)
-        return alive_workers
-
-    def get_alive_workers(self) -> List[Worker]:
-        """Get the list of alive workers."""
-        alive_workers = []
-        for worker in self.workersDict.values():
-            if worker.Alive:
-                alive_workers.append(worker)
-        return alive_workers
 
     def get_best_worker(self) -> Worker:
         """Get the worker with the lowest EMA response time."""
