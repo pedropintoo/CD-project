@@ -218,9 +218,12 @@ class WTManager:
         
         while self.has_pending_tasks() and worker is not None:
             task_id = self.pending_tasks_queue.pop(0)
+            
             task = Task(task_id, worker)
-            new_work_tasks.append(task)
             self.working_tasks[task_id] = task
+            new_work_tasks.append(task)
+
+            worker = self.get_best_worker() # get the next best worker
 
         return new_work_tasks
 
