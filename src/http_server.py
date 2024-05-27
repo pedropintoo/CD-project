@@ -26,7 +26,7 @@ class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
             self.send_header('Content-type','text/html')
             self.end_headers()
             
-            self.logger.debug("HTTP request.")
+            self.logger.debug("HTTP request.") # new thread
             # send request to p2p
             self.request_queue.put(data)
 
