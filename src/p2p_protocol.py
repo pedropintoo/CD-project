@@ -46,7 +46,21 @@ class SolveReplyMessage(Message):
         super().__init__("SOLVE_REPLY", replyAddress)
         self.data["args"] = {"task_id": task_id}
 
+class FloodingResultMessage(Message):
+    """Message to communicate baseValue and incrementedValue."""
 
+    def __init__(self, replyAddress: str, baseValue: int, incrementedValue: int):
+        super().__init__("FLOODING_RESULT", replyAddress)
+        self.data["baseValue"] = baseValue
+        self.data["incrementedValue"] = incrementedValue
+
+class FloodingConfirmationMessage(Message):
+    """Message to confirm the flooding result."""
+
+    def __init__(self, replyAddress: str, baseValue: int):
+        super().__init__("FLOODING_CONFIRMATION", replyAddress)
+        self.data["baseValue"] = baseValue
+    
 class P2PProtocol:
     """P2P Protocol."""
     
@@ -71,11 +85,20 @@ class P2PProtocol:
         return SolveRequestMessage(replyAddress, task_id)
     
     @classmethod
-    def solve_reply(cls, replyAddress: str, task_id: int) -> SolveRequestMessage:
+    def solve_reply(cls, replyAddress: str, task_id: int) -> SolveReplyMessage:
         """Creates a SolveRequestMessage object."""
         return SolveReplyMessage(replyAddress, task_id)
 
+    @classmethod
+    def flooding_result(cls, replyAddress: str, baseValue: int, incrementedValue: int) -> FloodingResultMessage:
+        """Creates a SolveRequestMessage object."""
+        return FloodingResultMessage(replyAddress, baseValue, incrementedValue)
 
+    @classmethod
+    def flooding_confirmation(cls, replyAddress: str, baseValue: int) -> FloodingConfirmationMessage:
+        """Creates a FloodingConfirmationMessage object."""
+        return FloodingConfirmationMessage(replyAddress, baseValue)
+    
     @classmethod
     def send_msg(cls, socket: socket, msg: Message):
         """Sends through a socket a Message object."""
@@ -118,11 +141,14 @@ class P2PProtocol:
             return SolveRequestMessage(data["replyAddress"], data["args"]["task_id"])
         elif command == "SOLVE_REPLY":
             return SolveReplyMessage(data["replyAddress"], data["args"]["task_id"])
+        elif command == "FLOODING_RESULT":
+            return FloodingResultMessage(data["replyAddress"],data["baseValue"], data["incrementedValue"])
+        elif command == "FLOODING_CONFIRMATION":
+            return FloodingConfirmationMessage(data["replyAddress"],data["baseValue"])
         else:
             raise P2PProtocolBadFormat(received)
 
 
-    
 class P2PProtocolBadFormat(Exception):
     """Exception when source message is not P2PProtocol."""
 
