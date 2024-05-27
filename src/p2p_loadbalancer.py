@@ -11,8 +11,8 @@ class Worker:
         self.Alive = True       # false when worker is dead ( it means that the worker is not responding or socket was closed )
         self.isAvailable = True # false when worker is working
 
-        # hello response time
-        self.last_hello_received = time.time()
+        # flooding response time
+        self.last_flooding_received = time.time()
 
         # task response time
         self.last_task_sended = time.time()
@@ -26,10 +26,10 @@ class Worker:
         self.isAvailable = False
         self.last_task_sended = time.time()
 
-    def hello_received(self):  
+    def flooding_received(self):  
         """Worker give signs of aliveness.""" 
         self.Alive = True
-        self.last_hello_received = time.time()
+        self.last_flooding_received = time.time()
 
     def task_done(self):  
         """Worker give signs of aliveness.""" 
@@ -45,13 +45,13 @@ class Worker:
                                     (1 - self.smoothing_factor) * self.task_response_time)
         
 
-    def isHelloTimeout(self):
+    def isFloodingTimeout(self):
         if self.Alive == False:
             return True
 
         # Recalculate
-        elapsed_time = time.time() - self.last_hello_received
-        if elapsed_time > 5: # TODO: thing about this limit value
+        elapsed_time = time.time() - self.last_flooding_received
+        if elapsed_time > 6: # TODO: thing about this limit value
             self.Alive = False
 
         return not self.Alive
@@ -172,10 +172,10 @@ class WTManager:
         """Get the list of alive workers addresses."""
         return [worker.worker_address for worker in self.get_alive_workers()]
 
-    def checkWorkersHelloTimeouts(self):
+    def checkWorkersFloodingTimeouts(self):
         """Check for workers that have timed out."""
         for worker in self.get_alive_workers():
-            if worker.isHelloTimeout():
+            if worker.isFloodingTimeout():
                 # we do not kill the socket! we just mark the worker as dead
                 self.logger.warning(f"Worker {worker.worker_address} is sleeping.")
                 self.kill_worker(worker.worker_address, close_socket=False)

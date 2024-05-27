@@ -16,15 +16,20 @@ class Node:
         self.selector = selectors.DefaultSelector()
         self.anchor = anchor # uniform format 'host:port'
 
-        self.stats = {"all" : {"solved": 0, "validations": 0}, "nodes": []}
+        # self.stats = {"all" : {"solved": 0, "validations": 0}, "nodes": []}
+        self.stats = {"baseValue": 0}
+        self.flooding_round = 0
+        self.incrementedValue = 0
+        self.pending_stats = {"baseValue": 0, "incrementedValue": 0, "totalIncrementedValue": 0, "numberOfResults": 0}
+        
         self.network = {}
         
         self.isHandlingHTTP = False
 
         self.handicap = handicap
 
-        self.last_hello = time.time()
-        self.TIME_TO_HELLO = 1 # in seconds
+        self.last_flooding = time.time()
+        self.TIME_TO_FLOODING = 2 # in seconds
 
         self.http_server = HTTPServerThread(self.logger, host, http_port, self.stats, self.network)
         self.p2p_server = P2PServerThread(self.logger, host, p2p_port)
@@ -78,9 +83,9 @@ class Node:
             time.sleep(self.handicap)
             
 
-    def isToSendHello(self):
-        """Check if it is time to send a hello message."""
-        return (time.time() - self.last_hello) > self.TIME_TO_HELLO
+    def isToSendFlooding(self):
+        """Check if it is time to send a flooding message."""
+        return (time.time() - self.last_flooding) > self.TIME_TO_FLOODING
 
     def run(self):
         """Run the node."""
@@ -99,15 +104,19 @@ class Node:
 
 ######### Main loop
         while True:
-            
-            if self.isToSendHello():
+            # TODO: flooding protocol
+            if self.isToSendFlooding():
+                self.pending_stats["incrementedValue"] = self.incrementedValue
+                
                 for worker in self.wtManager.get_alive_workers():
-                    self.logger.debug(f"P2P: Sending hello to {worker.worker_address}")
-                    msg = P2PProtocol.hello(self.p2p_server.replyAddress, list(self.wtManager.get_alive_workers_address()))
+                    self.logger.debug(f"P2P: Sending flooding consensus to {worker.worker_address} [{self.pending_stats['baseValue']}, {self.pending_stats['incrementedValue']}]")
+                    msg = P2PProtocol.flooding_result(self.p2p_server.replyAddress, self.pending_stats["baseValue"], self.pending_stats["incrementedValue"])
                     self.send_msg(worker, msg)
-                self.last_hello = time.time()
+                self.last_flooding = time.time()
 
-            self.wtManager.checkWorkersHelloTimeouts() # kill inactive workers (if any)   
+                self.incrementedValue = 0
+
+            self.wtManager.checkWorkersFloodingTimeouts() # kill inactive workers (if any)   
 
 
             # get http request (if any)                
@@ -148,11 +157,11 @@ class Node:
                     if worker is None:
                         self.connectWorker(host_port)
                     else:
-                        worker.hello_received()
                         if worker.socket == None:
                             # worker was dead and socket must be reconnected
                             self.connectWorker(host_port)
-                            
+
+                    # TODO: to be removed  
                     # Add nodes that current node does not have
                     for host_port in data["args"]["nodesList"]:
                         # Skip if the node is the same as the current node
@@ -166,7 +175,7 @@ class Node:
                     host_port = data["replyAddress"]
 
                     worker = self.connectWorker(host_port)
-                    worker.hello_received() # if the worker is not new it is a reconnection!
+                    worker.flooding_received() # if the worker is not new it is a reconnection!
 
                     # reply with the list of nodes
                     msg = P2PProtocol.join_reply(nodesList=list(self.wtManager.get_alive_workers_address()))
@@ -204,6 +213,52 @@ class Node:
                     # Store the task as solved
                     task_id = data["args"]["task_id"]
                     self.wtManager.finish_task(task_id) 
+                    # update flooding stats
+                    self.incrementedValue += 1
+                    self.logger.critical("INCREASE ONE!!!")
+            
+                elif data["command"] == "FLOODING_RESULT":
+                    baseValueReceived = data["baseValue"]
+                    incrementedValueReceived = data["incrementedValue"]
+                    # roundReceived = data["round"]
+                    
+                    self.pending_stats["baseValue"] = max(self.pending_stats["baseValue"], baseValueReceived)
+                    
+                    self.pending_stats["numberOfResults"] += 1
+                    self.pending_stats["totalIncrementedValue"] += incrementedValueReceived  
+
+                    worker = self.wtManager.workersDict.get(data["replyAddress"])
+                    worker.flooding_received() # update the last flooding time
+                    
+                    self.logger.debug(f"P2P: Flooding result received. [{baseValueReceived}, {incrementedValueReceived}]")
+                    self.logger.warning(f"[{self.pending_stats['baseValue']}, {self.incrementedValue}, {self.pending_stats['totalIncrementedValue'] }]")
+                    
+                elif data["command"] == "FLOODING_CONFIRMATION":
+                    # update baseValue if someone has a higher value (or higher round)
+                    baseValueReceived = data["baseValue"]
+                    
+                    # TODO: check if round has been confirmed
+
+                    self.stats["baseValue"] = max(self.pending_stats["baseValue"], baseValueReceived)
+
+                    self.pending_stats = {"baseValue": self.stats["baseValue"], "incrementedValue": 0, "totalIncrementedValue": 0, "numberOfResults": 0}    
+                
+
+            # only when I receive the result from all ALIVE nodes I will send the confirmation
+            if len(self.wtManager.get_alive_workers()) > 0 and self.pending_stats["numberOfResults"] >= len(self.wtManager.get_alive_workers()):
+                self.stats["baseValue"] = self.pending_stats["baseValue"] + self.pending_stats["totalIncrementedValue"] + self.pending_stats["incrementedValue"]
+                
+                self.logger.critical(f"[{self.pending_stats['baseValue']}, {self.pending_stats['incrementedValue']}, {self.pending_stats['totalIncrementedValue']}]")
+
+                # broadcast the confirmation
+                for worker in self.wtManager.get_alive_workers():
+                    msg = P2PProtocol.flooding_confirmation(self.p2p_server.replyAddress, self.stats["baseValue"])
+                    self.send_msg(worker, msg)
+                
+                # setup for the next round
+                self.pending_stats = {"baseValue": self.stats["baseValue"], "incrementedValue": 0, "totalIncrementedValue": 0, "numberOfResults": 0}
+                
+                # self.flooding_round += 1
             
 
             if not self.isHandlingHTTP:
