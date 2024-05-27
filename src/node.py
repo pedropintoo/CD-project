@@ -19,6 +19,7 @@ class Node:
         # self.stats = {"all" : {"solved": 0, "validations": 0}, "nodes": []}
         self.stats = {"baseValue": 0}
         self.flooding_round = 0
+        self.incrementedValue = 0
         self.pending_stats = {"baseValue": 0, "incrementedValue": 0, "totalIncrementedValue": 0, "numberOfResults": 0}
         
         self.network = {}
@@ -105,11 +106,15 @@ class Node:
         while True:
             # TODO: flooding protocol
             if self.isToSendFlooding():
+                self.pending_stats["incrementedValue"] = self.incrementedValue
+                
                 for worker in self.wtManager.get_alive_workers():
-                    self.logger.debug(f"P2P: Sending flooding consensus to {worker.worker_address}")
+                    self.logger.debug(f"P2P: Sending flooding consensus to {worker.worker_address} [{self.pending_stats['baseValue']}, {self.pending_stats['incrementedValue']}]")
                     msg = P2PProtocol.flooding_result(self.p2p_server.replyAddress, self.pending_stats["baseValue"], self.pending_stats["incrementedValue"])
                     self.send_msg(worker, msg)
                 self.last_flooding = time.time()
+
+                self.incrementedValue = 0
 
             self.wtManager.checkWorkersFloodingTimeouts() # kill inactive workers (if any)   
 
@@ -209,8 +214,8 @@ class Node:
                     task_id = data["args"]["task_id"]
                     self.wtManager.finish_task(task_id) 
                     # update flooding stats
-                    self.pending_stats["incrementedValue"] += 1
-                    self.pending_stats["totalIncrementedValue"] += 1
+                    self.incrementedValue += 1
+                    self.logger.critical("INCREASE ONE!!!")
             
                 elif data["command"] == "FLOODING_RESULT":
                     baseValueReceived = data["baseValue"]
@@ -224,44 +229,27 @@ class Node:
 
                     worker = self.wtManager.workersDict.get(data["replyAddress"])
                     worker.flooding_received() # update the last flooding time
-
-                    # different round, ignore the result
-                    # if self.pending_stats["round"] != roundReceived:
-                    #     continue
-
-                    
                     
                     self.logger.debug(f"P2P: Flooding result received. [{baseValueReceived}, {incrementedValueReceived}]")
-                    self.logger.warning(f"[{self.pending_stats['baseValue']}, {self.pending_stats['incrementedValue']}, {self.pending_stats['totalIncrementedValue']}]")
+                    self.logger.warning(f"[{self.pending_stats['baseValue']}, {self.incrementedValue}, {self.pending_stats['totalIncrementedValue'] }]")
                     
                 elif data["command"] == "FLOODING_CONFIRMATION":
                     # update baseValue if someone has a higher value (or higher round)
                     baseValueReceived = data["baseValue"]
-                    #roundReceived = data["round"]
                     
                     # TODO: check if round has been confirmed
 
                     self.stats["baseValue"] = max(self.pending_stats["baseValue"], baseValueReceived)
 
                     self.pending_stats = {"baseValue": self.stats["baseValue"], "incrementedValue": 0, "totalIncrementedValue": 0, "numberOfResults": 0}    
-
-                    # if self.flooding_round-1 > roundReceived:
-                    #     continue
-
-                    # elif self.pending_stats["round"] < roundReceived:
-                    #     # reset the pending stats (not the number of results!!)
-                    #     self.pending_stats["round"] = roundReceived
-                    #     self.stats["baseValue"] = baseValueReceived
-
-                    # else:
-                    #     if (baseValueReceived > self.pending_stats["baseValue"]):
-                    #         self.stats["baseValue"] = baseValueReceived
                 
 
             # only when I receive the result from all ALIVE nodes I will send the confirmation
-            if self.pending_stats["numberOfResults"] >= len(self.wtManager.get_alive_workers()):
-                self.stats["baseValue"] = self.pending_stats["baseValue"] + self.pending_stats["totalIncrementedValue"]
+            if len(self.wtManager.get_alive_workers()) > 0 and self.pending_stats["numberOfResults"] >= len(self.wtManager.get_alive_workers()):
+                self.stats["baseValue"] = self.pending_stats["baseValue"] + self.pending_stats["totalIncrementedValue"] + self.pending_stats["incrementedValue"]
                 
+                self.logger.critical(f"[{self.pending_stats['baseValue']}, {self.pending_stats['incrementedValue']}, {self.pending_stats['totalIncrementedValue']}]")
+
                 # broadcast the confirmation
                 for worker in self.wtManager.get_alive_workers():
                     msg = P2PProtocol.flooding_confirmation(self.p2p_server.replyAddress, self.stats["baseValue"])
@@ -269,6 +257,7 @@ class Node:
                 
                 # setup for the next round
                 self.pending_stats = {"baseValue": self.stats["baseValue"], "incrementedValue": 0, "totalIncrementedValue": 0, "numberOfResults": 0}
+                
                 # self.flooding_round += 1
             
 
