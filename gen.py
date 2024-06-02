@@ -1,6 +1,6 @@
 import random
 import sys
-from sudoku import Sudoku
+from src.sudoku import Sudoku
 
 
 def solve_sudoku(board):
