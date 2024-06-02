@@ -1,18 +1,32 @@
 import time
 from collections import deque
 
-class SudokuAlgorithm:
-    def __init__(self, sudoku = None, base_delay=0.01, interval=10, threshold=5):
+class Sudoku:
+    def __init__(self, sudoku, base_delay=0.01, interval=10, threshold=5):
         self.grid = sudoku
         self.recent_requests = deque()
-        self.base_delay = base_delay # delay apllied when the number of requests exceeds the threshold
-        self.interval = interval # interval to check if the number of requests exceeds the threshold
-        self.threshold = threshold # maximum number of requests allowed in the interval
+        self.base_delay = base_delay
+        self.interval = interval
+        self.threshold = threshold
 
-    @classmethod
-    def checkWith(clc, sudoku, solverConfig):
-        solver = SudokuAlgorithm(sudoku, solverConfig.base_delay, solverConfig.interval, solverConfig.threshold)
-        return solver.check(solverConfig.base_delay, solverConfig.interval, solverConfig.threshold)
+    def _limit_calls(self, base_delay=0.01, interval=10, threshold=5):
+        """Limit the number of requests made to the Sudoku object."""
+        if base_delay is None:
+            base_delay = self.base_delay
+        if interval is None:
+            interval = self.interval
+        if threshold is None:
+            threshold = self.threshold
+
+        current_time = time.time()
+        self.recent_requests.append(current_time)
+        num_requests = len(
+            [t for t in self.recent_requests if current_time - t < interval]
+        )
+
+        if num_requests > threshold:
+            delay = base_delay * (num_requests - threshold + 1)
+            time.sleep(delay)
 
     def __str__(self):
         string_representation = "| - - - - - - - - - - - |\n"
@@ -33,45 +47,34 @@ class SudokuAlgorithm:
 
         return string_representation
 
-    # def calculate_delay_params(self, handicap_ms, num_requests):
-    #     # Define arbitrary proportions for interval and threshold
-    #     interval = 10  # interval to check if the number of requests exceeds the threshold
-    #     threshold = 5  # limit of allowed calls
+    def update_row(self, row, values):
+        """Update the values of the given row."""
+        self.grid[row] = values
 
-    #     # Convert handicap from milliseconds to seconds
-    #     handicap_seconds = handicap_ms / 1000.0
+    def update_column(self, col, values):
+        """Update the values of the given column."""
+        for row in range(9):
+            self.grid[row][col] = values[row]
 
-    #     # Calculate base_delay: total handicap divided by the number of calls exceeding the threshold
-    #     # Ensure we only apply base_delay if num_requests exceeds threshold
-    #     if num_requests > threshold:
-    #         base_delay = handicap_seconds / (num_requests - threshold) # the delay is applied proportionally based on the excess number of requests.
-    #     else:
-    #         base_delay = 0  # No delay needed if the number of requests does not exceed the threshold
+    def check_is_valid(
+        self, row, col, num, base_delay=None, interval=None, threshold=None
+    ):
+        """Check if 'num' is not in the current row, column and 3x3 sub-box."""
+        self._limit_calls(base_delay, interval, threshold)
 
-    #     return base_delay, interval, threshold
-    
-    
-    def _limit_calls(self, base_delay=0.01, interval=10, threshold=5):
-        """Limit the number of requests made to the Sudoku object."""
-        if base_delay is None:
-            base_delay = self.base_delay
-        if interval is None:
-            interval = self.interval
-        if threshold is None:
-            threshold = self.threshold
+        # Check if the number is in the given row or column
+        for i in range(9):
+            if self.grid[row][i] == num or self.grid[i][col] == num:
+                return False
 
-        current_time = time.time()
-        self.recent_requests.append(current_time)
-        
-        # number of requests made in the last interval
-        num_requests = len(
-            [t for t in self.recent_requests if current_time - t < interval]
-        )
+        # Check if the number is in the 3x3 sub-box
+        start_row, start_col = 3 * (row // 3), 3 * (col // 3)
+        for i in range(3):
+            for j in range(3):
+                if self.grid[start_row + i][start_col + j] == num:
+                    return False
 
-        # If the number of requests exceeds the threshold, the delay increases linearly
-        if num_requests > threshold:
-            delay = base_delay * (num_requests - threshold + 1)
-            time.sleep(delay)
+        return True
 
     def check_row(self, row, base_delay=None, interval=None, threshold=None):
         """Check if the given row is correct."""
@@ -112,9 +115,9 @@ class SudokuAlgorithm:
 
         return True
 
-
     def check(self, base_delay=None, interval=None, threshold=None):
         """Check if the given Sudoku solution is correct.
+
         You MUST incorporate this method without modifications into your final solution.
         """
 
@@ -135,3 +138,25 @@ class SudokuAlgorithm:
 
         return True
 
+
+if __name__ == "__main__":
+    sudoku = Sudoku(
+        [
+            [8, 9, 7, 1, 2, 4, 6, 3, 5],
+            [5, 3, 1, 6, 7, 9, 2, 8, 4],
+            [6, 4, 2, 3, 8, 5, 1, 7, 9],
+            [1, 5, 4, 2, 9, 3, 8, 6, 7],
+            [2, 8, 9, 7, 1, 6, 4, 5, 3],
+            [3, 7, 6, 4, 5, 8, 9, 1, 2],
+            [9, 2, 3, 8, 6, 7, 5, 4, 1],
+            [7, 6, 5, 9, 4, 1, 3, 2, 8],
+            [4, 1, 8, 5, 3, 2, 7, 9, 6],
+        ]
+    )
+
+    print(sudoku)
+
+    if sudoku.check():
+        print("Sudoku is correct!")
+    else:
+        print("Sudoku is incorrect! Please check your solution.")

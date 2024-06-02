@@ -10,3 +10,6 @@ Introdução ao problema do Sudoku
 - nó recebe o request e gera nos espaços vazios do tabuleiro, os possiveis valores
 - neste momento o nó inicial tem vários sudokus possiveis, e tem de mandar os outros nós correrem o check do sudoku.py nesse sudoku.
 - os nós que recebem o pedido, correm o check e devolvem o resultado ao nó inicial
+
+
+

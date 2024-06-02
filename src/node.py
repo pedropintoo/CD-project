@@ -166,6 +166,23 @@ class Node:
                         if self.wtManager.workersDict.get(host_port) is None:
                             self.connectWorker(host_port)
                             
+                elif data["command"] == "FLOODING_RESULT":
+                    baseValueReceived = data["baseValue"]
+                    incrementedValueReceived = data["incrementedValue"]
+                    
+                    # TODO: if baseValue is less than i need to ignore the message
+                    # TODO: if baseValue is greater than i need to update the baseValue and forget the incrementedValue
+
+                    self.pending_stats["baseValue"] = max(self.pending_stats["baseValue"], baseValueReceived)
+                    
+                    self.pending_stats["numberOfResults"] += 1
+                    self.pending_stats["totalIncrementedValue"] += incrementedValueReceived  
+
+                    worker = self.wtManager.workersDict.get(data["replyAddress"])
+                    worker.flooding_received() # update the last flooding time
+                    
+                    self.logger.warning(f"[{self.pending_stats['baseValue']}, {self.incrementedValue}, {self.pending_stats['totalIncrementedValue'] }]")
+
                 elif data["command"] == "JOIN_REQUEST":
                     host_port = data["replyAddress"]
 
@@ -224,29 +241,11 @@ class Node:
                     # Store the task as solved
                     task_id = data["args"]["task_id"]
                     solution = data["args"]["solution"]
-                    
-                    if solution is not None:
-                        self.logger.info(f"Task solved in {task_id}.")
-                        
+                                            
                     self.wtManager.finish_task(task_id, solution) 
                     # update flooding stats
                     self.incrementedValue += 1
-                    self.logger.critical(f"INCREASE ONE!!! {task_id}")
-            
-                elif data["command"] == "FLOODING_RESULT":
-                    baseValueReceived = data["baseValue"]
-                    incrementedValueReceived = data["incrementedValue"]
-                    # roundReceived = data["round"]
-                    
-                    self.pending_stats["baseValue"] = max(self.pending_stats["baseValue"], baseValueReceived)
-                    
-                    self.pending_stats["numberOfResults"] += 1
-                    self.pending_stats["totalIncrementedValue"] += incrementedValueReceived  
-
-                    worker = self.wtManager.workersDict.get(data["replyAddress"])
-                    worker.flooding_received() # update the last flooding time
-                    
-                    self.logger.warning(f"[{self.pending_stats['baseValue']}, {self.incrementedValue}, {self.pending_stats['totalIncrementedValue'] }]")
+                    self.logger.critical(f"INCREASE ONE!!! {task_id} {solution}")
                     
                 elif data["command"] == "FLOODING_CONFIRMATION":
                     # update baseValue if someone has a higher value (or higher round)
@@ -282,8 +281,14 @@ class Node:
             # check if completed
             if self.wtManager.isDone():
                 self.isHandlingHTTP = False
-                self.http_server.response_queue.put("task done!")
-                self.logger.debug("HTTP: Task done!")
+                if len(self.wtManager.solutionsDict) > 0:
+                    # TODO: must select the client to send the response (for now only one client is supported)
+                    solution = self.wtManager.solutionsDict.popitem()[1] # the first element is the sudoku_id solved!
+                    self.logger.info(f"HTTP: Task done! {solution}")
+                    self.http_server.response_queue.put(solution)
+                else:    
+                    self.http_server.response_queue.put(None)
+                    self.logger.debug("HTTP: Task done! [No solution]")
             else:
             # manage tasks assignments and timeouts
                 retry_tasks = self.wtManager.checkTasksTimeouts() # tasks to retry, the timeout ones were all in the pending queue!

@@ -2,6 +2,7 @@ import http.server as http_server
 import socketserver, socket, json
 from queue import Queue
 from threading import Lock, Thread
+from src.sudoku_algorithm import SudokuAlgorithm
 
 class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
     request_queue = None
@@ -36,8 +37,8 @@ class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
                     self.send_response(200)
                     self.send_header('Content-type', 'text/html')
                     self.end_headers()
-                
-                    self.wfile.write((response + "\n").encode("utf8"))
+
+                    self.wfile.write(((f"\n\n\033[92m{'Solved!!'}\033[00m \n" + str(SudokuAlgorithm(response))) if response is not None else f"\n\n\033[91m{'Not found!'}\033[00m" + "\n").encode("utf8"))
                 
                 # Handle JSON errors    
                 except (json.JSONDecodeError, KeyError) as e:
@@ -53,8 +54,6 @@ class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b"404 Not Found\n")
                 
-            
-
     def do_GET(self):
         # Handle the stats request
         if self.path.endswith("/stats"):

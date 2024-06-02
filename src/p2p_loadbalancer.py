@@ -119,11 +119,7 @@ class WTManager:
         self.pending_tasks_queue: List[TaskID] = [] # TaskID, ..
         self.working_tasks: Dict[TaskID, Task] = {} # TaskID -> Task
 
-        self.logger = logger
-
-    def pop_solution(self, task_id: TaskID) -> str:
-        """Pop the solution of the task."""
-        return self.solutionsDict.pop(task_id.sudoku_id, None)        
+        self.logger = logger  
 
     def get_sudoku(self, task_id: TaskID) -> str:
         """Get the sudoku by its id."""
@@ -139,6 +135,7 @@ class WTManager:
 
     def add_pending_task(self, sudoku: str):
         """Add a task to the pending queue."""
+        # TODO: make it in runtime!!!
         self.sudoku_id += 1
         self.sudokusDict[self.sudoku_id] = sudoku
         emptyCells = self._count_zeros(sudoku)
@@ -175,11 +172,11 @@ class WTManager:
                 if task_id in self.pending_tasks_queue:
                     self.pending_tasks_queue.remove(task_id) # the responser is a dead worker
             except ValueError:
-                pass 
+                pass
 
         if solution is not None:
             self.solutionsDict[task_id.sudoku_id] = solution
-            self.solutionsDict.pop(task_id.sudoku_id, None)
+            self.sudokusDict.pop(task_id.sudoku_id, None)
             
             # remove the sudoku from other workers 
             working_copy = self.working_tasks.copy()
