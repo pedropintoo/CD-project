@@ -156,7 +156,8 @@ class Node:
 
                 self.logger.warning(f"HTTP: Requested {http_request} tasks.")
                 
-                sudoku = http_request["sudoku"]
+                
+                sudoku = http_request
                 
                 # The sudoku received have empty spaces as zeros
                 # We need to generate a list with the sudokus possible combinations to send to the workers
@@ -180,9 +181,6 @@ class Node:
                     print(sudoku)
                     print()
                     
-                
-                # Wait 30 seconds to simulate the time to generate the sudokus
-                time.sleep(30)
                 
                 # Now we have a list with all the possible sudokus to send to the workers
                 

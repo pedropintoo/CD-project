@@ -22,7 +22,7 @@ if __name__ == "__main__":
     else:
         host = utils_network.get_ip_address()
 
-    node = Node(host, args.http_port, args.p2p_port, args.anchor, args.handicap, args.threads)
+    node = Node(host, args.http_port, args.p2p_port, args.anchor, args.handicap, args.http_threads)
     node.run()
 
 
