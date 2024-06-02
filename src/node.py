@@ -143,7 +143,7 @@ class Node:
             self.wtManager.checkWorkersFloodingTimeouts() # kill inactive workers (if any)   
 
 
-            # get http request (if any)                
+            # get http request (if any)
             try:
                 http_request = self.http_server.request_queue.get(block=False) 
             except queue.Empty:
