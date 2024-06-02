@@ -1,7 +1,6 @@
 import time
-from typing import Dict, List
+from typing import Dict, List, Tuple, NamedTuple
 from socket import socket
-from src.sudoku import Sudoku
 
 class Worker:
     def __init__(self, host_port: str, socket: socket, smoothing_factor: float = 0.50):
@@ -67,11 +66,17 @@ class Worker:
         self.isAvailable = True # for future reconnection
         self.update_task_response_time()
 
+class TaskID(NamedTuple):
+    sudoku_id: str
+    start: int
+    end: int
+
+    def __str__(self):
+        return f"{self.sudoku_id}[{self.start}-{self.end}]"
 
 class Task:
-    def __init__(self, task_id: int, sudoku: str, worker: Worker, tries_limit: int = 1):
+    def __init__(self, task_id: TaskID, worker: Worker, tries_limit: int = 1):
         self.task_id = task_id
-        self.sudoku = sudoku
         
         self.worker = worker
         worker.start_task()
@@ -92,22 +97,53 @@ class Task:
         """Increment the number of tries."""
         self.tries += 1
 
-
 # Workers & Tasks Manager (load balancer)
 class WTManager:
     def __init__(self, logger):
         # workers manager
         self.workersDict: Dict[str, Worker] = {}
 
+        self.sudoku_id = 0
+        self.sudokusDict: Dict[str, str] = {} # sudoku_id -> sudoku
+
         # tasks manager
-        self.pending_tasks_queue: List[int] = []
-        self.working_tasks: Dict[int, Task] = {}
+        self.pending_tasks_queue: List[TaskID] = [] # TaskID, ..
+        self.working_tasks: Dict[TaskID, Task] = {} # TaskID -> Task
 
         self.logger = logger
 
-    def add_pending_task(self, task_id: int, sudoku: str):
+    def get_sudoku(self, task_id: TaskID) -> str:
+        """Get the sudoku by its id."""
+        return self.sudokusDict.get(task_id.sudoku_id)
+
+    def _count_zeros(self, matrix):
+        count = 0
+        for row in matrix:
+            for element in row:
+                if element == 0:
+                    count += 1
+        return count
+
+    def add_pending_task(self, sudoku: str):
         """Add a task to the pending queue."""
-        self.pending_tasks_queue.append(task_id)
+        self.sudoku_id += 1
+        self.sudokusDict[self.sudoku_id] = sudoku
+
+        emptyCells = self._count_zeros(sudoku)
+        global_start = int(emptyCells * '1')
+        global_end = int("1" + emptyCells * '0')
+
+        TASK_UNIT_SIZE = 100
+        while global_start + TASK_UNIT_SIZE <= global_end:
+            task_id = TaskID(self.sudoku_id, global_start, global_start + TASK_UNIT_SIZE)
+            self.pending_tasks_queue.append(task_id)
+            global_start += TASK_UNIT_SIZE
+
+        # add the remaining tasks (if any)
+        if global_start < global_end:    
+            task_id = TaskID(self.sudoku_id, global_start, global_end)
+            self.pending_tasks_queue.append(task_id)
+        
 
     def add_worker(self, host_port: str, socket: socket) -> Worker:
         """Add a worker to the workers list."""
@@ -115,9 +151,9 @@ class WTManager:
         self.workersDict[host_port] = worker
         return worker
 
-    def finish_task(self, task_id: int):
+    def finish_task(self, task_id: TaskID):
         """Remove a task from the working list."""
-        task = self.working_tasks.get(int(task_id)) 
+        task = self.working_tasks.get(task_id)
         
         if task is not None:
             task.worker.task_done()
@@ -215,9 +251,8 @@ class WTManager:
         
         while self.has_pending_tasks() and worker is not None:
             task_id = self.pending_tasks_queue.pop(0)
-            sudoku = self.get_sudoku(task_id)
             
-            task = Task(task_id, sudoku, worker)
+            task = Task(task_id, worker)
             self.working_tasks[task_id] = task
             new_work_tasks.append(task)
 
@@ -225,10 +260,6 @@ class WTManager:
 
         return new_work_tasks
 
-    def get_sudoku(self, task_id: int) -> str:
-        """Get the sudoku associated with the task."""
-        return "[[0, 0, 0, 1, 0, 0, 0, 0, 0], [0, 0, 0, 3, 2, 0, 0, 0, 0], [0, 0, 0, 0, 0, 9, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 7, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 9, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 9, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 3], [0, 0, 0, 0, 0, 0, 0, 0, 0]]"
-        # return Sudoku.get_sudoku(task_id) # TODO
 
     
 

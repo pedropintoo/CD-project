@@ -1,6 +1,7 @@
 from socket import socket
 import pickle
 from src.sudoku import Sudoku
+from src.p2p_loadbalancer import TaskID
 
 class Message:
     """Message Type."""
@@ -36,17 +37,16 @@ class JoinReplyMessage(Message):
 class SolveRequestMessage(Message):
     """Message to request to solve a task."""
     
-    def __init__(self, replyAddress:str, task_id: int, sudoku: str):
+    def __init__(self, replyAddress:str, task_id: TaskID, sudoku: str):
         super().__init__("SOLVE_REQUEST", replyAddress)
-        self.data["args"] = {"task_id": task_id}
-        self.data["sudoku"] = sudoku
+        self.data["args"] = {"task_id": task_id, "sudoku": sudoku}
 
 class SolveReplyMessage(Message):
     """Message to reply a solve request."""
     
-    def __init__(self, replyAddress: str, task_id: int):
+    def __init__(self, replyAddress: str, task_id: TaskID, solution: str = None):
         super().__init__("SOLVE_REPLY", replyAddress)
-        self.data["args"] = {"task_id": task_id}
+        self.data["args"] = {"task_id": task_id, "solution": solution}
 
 class FloodingResultMessage(Message):
     """Message to communicate baseValue and incrementedValue."""
@@ -82,14 +82,14 @@ class P2PProtocol:
         return JoinReplyMessage(nodesList)
 
     @classmethod
-    def solve_request(cls, replyAddress: str,task_id: int, sudoku: str) -> SolveRequestMessage:
+    def solve_request(cls, replyAddress: str,task_id: TaskID, sudoku: str) -> SolveRequestMessage:
         """Creates a SolveRequestMessage object."""
         return SolveRequestMessage(replyAddress, task_id, sudoku)
     
     @classmethod
-    def solve_reply(cls, replyAddress: str, task_id: int) -> SolveReplyMessage:
+    def solve_reply(cls, replyAddress: str, task_id: TaskID, solution: str = None) -> SolveReplyMessage:
         """Creates a SolveRequestMessage object."""
-        return SolveReplyMessage(replyAddress, task_id)
+        return SolveReplyMessage(replyAddress, task_id, solution)
 
     @classmethod
     def flooding_result(cls, replyAddress: str, baseValue: int, incrementedValue: int) -> FloodingResultMessage:
@@ -140,9 +140,9 @@ class P2PProtocol:
         elif command == "JOIN_REPLY":
             return JoinReplyMessage(data["args"]["nodesList"])
         elif command == "SOLVE_REQUEST":
-            return SolveRequestMessage(data["replyAddress"], data["args"]["task_id"], data["sudoku"])
+            return SolveRequestMessage(data["replyAddress"], data["args"]["task_id"], data["args"]["sudoku"])
         elif command == "SOLVE_REPLY":
-            return SolveReplyMessage(data["replyAddress"], data["args"]["task_id"])
+            return SolveReplyMessage(data["replyAddress"], data["args"]["task_id"], data["args"]["solution"])
         elif command == "FLOODING_RESULT":
             return FloodingResultMessage(data["replyAddress"],data["baseValue"], data["incrementedValue"])
         elif command == "FLOODING_CONFIRMATION":
