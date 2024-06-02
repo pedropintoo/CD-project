@@ -78,25 +78,16 @@ class Node:
             self.wtManager.kill_worker(host_port, close_socket=True) # the worker is dead, kill the socket!
 
     # DEMO propose
-    def execute_task(self, task_id):
+    def execute_task(self, task_id, sudoku: str):
         """Execute the task and send the reply."""
-        # for i in range(task_id*10, task_id*10+10):
-        #     time.sleep(self.handicap)
+        print(sudoku)
+        
+        # The sudoku received is a string, we have to convert it to a list of lists
+        sudoku = eval(sudoku)
+        
+        sudoku = Sudoku(sudoku)
         
         # task is run the function check() from class Sudoku in sudoku.py
-        sudoku = Sudoku(
-            [
-                [8, 9, 7, 1, 2, 4, 6, 3, 5],
-                [5, 3, 1, 6, 7, 9, 2, 8, 4],
-                [6, 4, 2, 3, 8, 5, 1, 7, 9],
-                [1, 5, 4, 2, 9, 3, 8, 6, 7],
-                [2, 8, 9, 7, 1, 6, 4, 5, 3],
-                [3, 7, 6, 4, 5, 8, 9, 1, 2],
-                [9, 2, 3, 8, 6, 7, 5, 4, 1],
-                [7, 6, 5, 9, 4, 1, 3, 2, 8],
-                [4, 1, 8, 5, 3, 2, 7, 9, 6],
-            ]
-        )
         result = sudoku.check()
         
         if result:
@@ -163,11 +154,42 @@ class Node:
                 self.logger.debug(f"HTTP: Requested {http_request} tasks.")
                 self.isHandlingHTTP = True
 
+                self.logger.warning(f"HTTP: Requested {http_request} tasks.")
+                
+                sudoku = http_request["sudoku"]
+                
+                # The sudoku received have empty spaces as zeros
+                # We need to generate a list with the sudokus possible combinations to send to the workers
+                # The sudoku is a string, so we need to convert it to a list of lists
+                # number_of_tasks will be the number of tasks to send to the workers
+                self.logger.error(f"HTTP: Requested {sudoku} tasks.")
+                
+                list_of_sudokus = []
+                number_of_tasks = 0
+                for i in range(9):
+                    for j in range(9):
+                        if sudoku[i][j] == 0:
+                            for k in range(1, 10):
+                                sudoku[i][j] = k
+                                list_of_sudokus.append(sudoku)
+                                number_of_tasks += 1
+                            sudoku[i][j] = 0
+                
+                # Print the list of sudokus
+                for sudoku in list_of_sudokus:
+                    print(sudoku)
+                    print()
+                    
+                
+                # Wait 30 seconds to simulate the time to generate the sudokus
+                time.sleep(30)
+                
+                # Now we have a list with all the possible sudokus to send to the workers
+                
                 # DEMO propose
-                number_of_tasks = int(http_request) 
                 # Add tasks to the pending queue
                 for i in range(number_of_tasks):
-                    self.wtManager.add_pending_task(i)
+                    self.wtManager.add_pending_task(i, list_of_sudokus[i])                    
       
             # Handle p2p requests (if any)     
             if p2p_request is not None:
@@ -225,7 +247,9 @@ class Node:
 
                 elif data["command"] == "SOLVE_REQUEST":
                     task_id = data["args"]["task_id"]
-                    self.execute_task(task_id) # DEMO propose
+                    sudoku = data["sudoku"]
+                    self.execute_task(task_id, sudoku) # DEMO propose
+                    
                     # TODO: this must be done with a time limit!!!
 
                     host_port = data["replyAddress"]
@@ -304,7 +328,7 @@ class Node:
                 # Retry tasks
                 for task in retry_tasks:
                     # build the tasks again
-                    msg = P2PProtocol.solve_request(self.p2p_server.replyAddress, task.task_id)
+                    msg = P2PProtocol.solve_request(self.p2p_server.replyAddress, task.task_id, task.sudoku)
                     
                     # send the tasks to the worker
                     self.send_msg(task.worker, msg)
@@ -315,7 +339,7 @@ class Node:
                 # Send tasks
                 for task in tasks_to_send:
                     # build the tasks
-                    msg = P2PProtocol.solve_request(self.p2p_server.replyAddress, task.task_id)
+                    msg = P2PProtocol.solve_request(self.p2p_server.replyAddress, task.task_id, task.sudoku)
 
                     # send the tasks to the worker
                     self.send_msg(task.worker, msg)

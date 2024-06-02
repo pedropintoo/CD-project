@@ -1,6 +1,7 @@
 import time
 from typing import Dict, List
 from socket import socket
+from src.sudoku import Sudoku
 
 class Worker:
     def __init__(self, host_port: str, socket: socket, smoothing_factor: float = 0.50):
@@ -68,8 +69,9 @@ class Worker:
 
 
 class Task:
-    def __init__(self, task_id: int, worker: Worker, tries_limit: int = 1):
+    def __init__(self, task_id: int, sudoku: str, worker: Worker, tries_limit: int = 1):
         self.task_id = task_id
+        self.sudoku = sudoku
         
         self.worker = worker
         worker.start_task()
@@ -103,7 +105,7 @@ class WTManager:
 
         self.logger = logger
 
-    def add_pending_task(self, task_id: int):
+    def add_pending_task(self, task_id: int, sudoku: str):
         """Add a task to the pending queue."""
         self.pending_tasks_queue.append(task_id)
 
@@ -213,8 +215,9 @@ class WTManager:
         
         while self.has_pending_tasks() and worker is not None:
             task_id = self.pending_tasks_queue.pop(0)
+            sudoku = self.get_sudoku(task_id)
             
-            task = Task(task_id, worker)
+            task = Task(task_id, sudoku, worker)
             self.working_tasks[task_id] = task
             new_work_tasks.append(task)
 
@@ -222,7 +225,10 @@ class WTManager:
 
         return new_work_tasks
 
-
+    def get_sudoku(self, task_id: int) -> str:
+        """Get the sudoku associated with the task."""
+        return "[[0, 0, 0, 1, 0, 0, 0, 0, 0], [0, 0, 0, 3, 2, 0, 0, 0, 0], [0, 0, 0, 0, 0, 9, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 7, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 9, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 9, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 3], [0, 0, 0, 0, 0, 0, 0, 0, 0]]"
+        # return Sudoku.get_sudoku(task_id) # TODO
 
     
 

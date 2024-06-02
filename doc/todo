@@ -7,4 +7,6 @@ Optimização da distribuicao de recursos! Começar com carga baixa
 
 Introdução ao problema do Sudoku
 - gen.py - gera um tabuleiro de sudoku e o curl responsavel por fazer o request
-- nó que receve o request, distribui por todos os nós. Cada nó, numa fase inicial, vai correr o check do sudoku.py.
+- nó recebe o request e gera nos espaços vazios do tabuleiro, os possiveis valores
+- neste momento o nó inicial tem vários sudokus possiveis, e tem de mandar os outros nós correrem o check do sudoku.py nesse sudoku.
+- os nós que recebem o pedido, correm o check e devolvem o resultado ao nó inicial

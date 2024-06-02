@@ -1,5 +1,6 @@
 from socket import socket
 import pickle
+from src.sudoku import Sudoku
 
 class Message:
     """Message Type."""
@@ -35,9 +36,10 @@ class JoinReplyMessage(Message):
 class SolveRequestMessage(Message):
     """Message to request to solve a task."""
     
-    def __init__(self, replyAddress:str, task_id: int):
+    def __init__(self, replyAddress:str, task_id: int, sudoku: str):
         super().__init__("SOLVE_REQUEST", replyAddress)
         self.data["args"] = {"task_id": task_id}
+        self.data["sudoku"] = sudoku
 
 class SolveReplyMessage(Message):
     """Message to reply a solve request."""
@@ -80,9 +82,9 @@ class P2PProtocol:
         return JoinReplyMessage(nodesList)
 
     @classmethod
-    def solve_request(cls, replyAddress: str,task_id: int) -> SolveRequestMessage:
+    def solve_request(cls, replyAddress: str,task_id: int, sudoku: str) -> SolveRequestMessage:
         """Creates a SolveRequestMessage object."""
-        return SolveRequestMessage(replyAddress, task_id)
+        return SolveRequestMessage(replyAddress, task_id, sudoku)
     
     @classmethod
     def solve_reply(cls, replyAddress: str, task_id: int) -> SolveReplyMessage:
@@ -138,7 +140,7 @@ class P2PProtocol:
         elif command == "JOIN_REPLY":
             return JoinReplyMessage(data["args"]["nodesList"])
         elif command == "SOLVE_REQUEST":
-            return SolveRequestMessage(data["replyAddress"], data["args"]["task_id"])
+            return SolveRequestMessage(data["replyAddress"], data["args"]["task_id"], data["sudoku"])
         elif command == "SOLVE_REPLY":
             return SolveReplyMessage(data["replyAddress"], data["args"]["task_id"])
         elif command == "FLOODING_RESULT":

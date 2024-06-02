@@ -25,15 +25,18 @@ class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
                 self.send_header('Content-type','text/html')
                 self.end_headers()
 
-                tasks = json.loads(data)['tasks']
-                self.logger.warning(f"HTTP request for {tasks} tasks.")
+                sudoku = json.loads(data)['sudoku']
+                self.logger.warning(f"HTTP request for {sudoku}.")
                 
                 # Send request to p2p
-                self.request_queue.put(tasks)
+                self.request_queue.put(sudoku)
 
                 # Wait for response
                 response = self.response_queue.get(block=True)
                 self.logger.debug(f"HTTP response.")
+        
+                # send request to p2p
+                self.request_queue.put(data)
 
                 self.wfile.write((response + "\n").encode("utf8"))
             else:
