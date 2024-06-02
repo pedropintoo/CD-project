@@ -1,2 +1,5 @@
-divisoes, e da + carga em quem é muito rapido.
+- divisoes, e da + carga em quem é muito rapido.
 Optimização da distribuicao de recursos! Começar com carga baixa
+- introdução do problema do sudoku
+- nó que distribui, também realiza trabalho
+- http server - selector
