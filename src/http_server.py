@@ -125,5 +125,4 @@ class HTTPServer():
             except Exception as e:
                 threads_count += f"\033[91m{'X'}\033[00m" # red
 
-
-        self.logger.debug("HTTP Threads ready: [" + threads_count + "]")
+        self.logger.debug("HTTP threads: [" + threads_count + "]")

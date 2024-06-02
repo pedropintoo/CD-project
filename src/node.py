@@ -4,8 +4,8 @@ import socket
 import queue
 import pickle
 from src.p2p_loadbalancer import WTManager, Worker
-from src.p2p_server import P2PServerThread
-from src.http_server import HTTPServerThread
+from src.p2p_server import P2PServer
+from src.http_server import HTTPServer
 from src.utils.logger import Logger
 from src.p2p_protocol import P2PProtocol 
 from src.sudoku import Sudoku
@@ -32,8 +32,8 @@ class Node:
         self.last_flooding = time.time()
         self.TIME_TO_FLOODING = 2 # in seconds
 
-        self.http_server = HTTPServerThread(self.logger, host, http_port, self.stats, self.network)
-        self.p2p_server = P2PServerThread(self.logger, host, p2p_port)
+        self.http_server = HTTPServer(self.logger, host, http_port, self.stats, self.network)
+        self.p2p_server = P2PServer(self.logger, host, p2p_port)
 
         # Workers & Tasks Manager (load balancer)
         self.wtManager = WTManager(self.logger) 
