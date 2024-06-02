@@ -1,5 +1,4 @@
-from concurrent.futures import ThreadPoolExecutor
-from http_server import HTTPServerThread
+from http_server import HTTPServer
 from utils.logger import Logger
 import time
 
@@ -8,7 +7,7 @@ host = "localhost"
 
 logger = Logger(f"[{host}]", f"logs/{host}.log")
 
-server = HTTPServerThread(logger, host, port, None, None)
+server = HTTPServer(logger, host, port, None, None)
 server.start()
 
 while True:

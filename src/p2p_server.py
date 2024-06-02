@@ -4,7 +4,7 @@ from threading import Thread
 from queue import Queue
 from src.p2p_protocol import P2PProtocol
 
-class P2PServerThread(Thread):
+class P2PServer(Thread):
     def __init__(self, logger, host, port):
         Thread.__init__(self)
         self.logger = logger
