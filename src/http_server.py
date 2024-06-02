@@ -21,14 +21,16 @@ class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
         if self.path.endswith("/solve"):
             length = int(self.headers.get('Content-Length'))
             data = self.rfile.read(length).decode('utf8')
-
+            
             self.send_response(200)
             self.send_header('Content-type','text/html')
             self.end_headers()
+
+            tasks = json.loads(data)['tasks']
+            self.logger.warning(f"HTTP request for {data} tasks. - " + str(self.prev_data)) # new thread
             
-            self.logger.debug("HTTP request.") # new thread
             # send request to p2p
-            self.request_queue.put(data)
+            self.request_queue.put(tasks)
 
             # wait for response
             response = self.response_queue.get(block=True)
