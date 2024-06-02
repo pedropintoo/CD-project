@@ -1,9 +1,7 @@
 import http.server as http_server
-import socketserver, socket, json, time
+import socketserver, socket, json
 from queue import Queue
 from threading import Lock, Thread
-
-HTTP_THREAD_COUNT = 20
 
 class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
     request_queue = None
@@ -33,13 +31,11 @@ class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
                 # Send request to p2p
                 self.request_queue.put(tasks)
 
-                time.sleep(5)
-
                 # Wait for response
-                #response = self.response_queue.get(block=True)
+                response = self.response_queue.get(block=True)
                 self.logger.debug(f"HTTP response.")
 
-                self.wfile.write(("response" + "\n").encode("utf8"))
+                self.wfile.write((response + "\n").encode("utf8"))
             else:
                 self.send_response(404)
                 self.end_headers()
@@ -64,7 +60,7 @@ class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
             self.wfile.write(b"404 Not Found\n")    
 
 class HTTPServerThread(Thread):
-    def __init__(self, logger, addr, sock, locker, stats, network):
+    def __init__(self, logger, addr, sock, locker, request_queue, response_queue, stats, network):
         Thread.__init__(self)
         self.daemon = True # Exit when main thread exits
         self.logger = logger
@@ -74,9 +70,8 @@ class HTTPServerThread(Thread):
         self.stats = stats
         self.network = network
 
-        # Generate request and response http queues
-        self.request_queue = Queue()
-        self.response_queue = Queue()
+        self.request_queue = request_queue
+        self.response_queue = response_queue
 
         self.start() # Start the thread
         
@@ -101,12 +96,18 @@ class HTTPServerThread(Thread):
 
 
 class HTTPServer():
-    def __init__(self, logger, host, port, stats, network):
+    def __init__(self, logger, host, port, stats, network, max_threads):
         self.logger = logger
         self.addr = (host, int(port))
         self.stats = stats
         self.network = network
         self.locker = Lock()
+
+        self.max_threads = max_threads
+
+        # Generate request and response http queues (THREAD SAFE!!)
+        self.request_queue = Queue()
+        self.response_queue = Queue()
 
         # One socket for all threads
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -118,9 +119,9 @@ class HTTPServer():
         self.logger.info("HTTP Server started http://%s:%s" % self.addr)
         threads_count = "" # For debugging
         
-        for i in range(HTTP_THREAD_COUNT):
+        for i in range(self.max_threads):
             try:
-                HTTPServerThread(self.logger, self.addr, self.sock, self.locker, self.stats, self.network)
+                HTTPServerThread(self.logger, self.addr, self.sock, self.locker, self.request_queue, self.response_queue, self.stats, self.network)
                 threads_count += f"\033[92m{'.'}\033[00m" # green
             except Exception as e:
                 threads_count += f"\033[91m{'X'}\033[00m" # red
