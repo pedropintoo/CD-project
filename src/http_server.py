@@ -27,7 +27,7 @@ class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
             self.end_headers()
 
             tasks = json.loads(data)['tasks']
-            self.logger.warning(f"HTTP request for {data} tasks. - " + str(self.prev_data)) # new thread
+            self.logger.warning(f"HTTP request for {data} tasks.") # new thread
             
             # send request to p2p
             self.request_queue.put(tasks)
