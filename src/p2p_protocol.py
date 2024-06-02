@@ -1,6 +1,5 @@
 from socket import socket
 import pickle
-from src.sudoku import Sudoku
 from src.p2p_loadbalancer import TaskID
 
 class Message:
@@ -82,7 +81,7 @@ class P2PProtocol:
         return JoinReplyMessage(nodesList)
 
     @classmethod
-    def solve_request(cls, replyAddress: str,task_id: TaskID, sudoku: str) -> SolveRequestMessage:
+    def solve_request(cls, replyAddress: str, task_id: TaskID, sudoku: str) -> SolveRequestMessage:
         """Creates a SolveRequestMessage object."""
         return SolveRequestMessage(replyAddress, task_id, sudoku)
     

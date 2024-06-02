@@ -16,51 +16,66 @@ class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
         return
 
     def do_POST(self):
-        with self.locker: # TODO: (remove this)
+        with self.locker: # TODO: (remove this)  
             if self.path.endswith("/solve"):
-                length = int(self.headers.get('Content-Length'))
-                data = self.rfile.read(length).decode('utf8')
+                try:
+                    length = int(self.headers.get('Content-Length'))
+                    data = self.rfile.read(length).decode('utf8')
                 
-                self.send_response(200)
-                self.send_header('Content-type','text/html')
-                self.end_headers()
+                    # Try to parse the JSON data
+                    sudoku = json.loads(data)['sudoku']
+                    self.logger.warning(f"HTTP request for {sudoku}.")
+                    
+                    # Put the request in the queue
+                    self.request_queue.put(sudoku)
 
-                sudoku = json.loads(data)['sudoku']
-                self.logger.warning(f"HTTP request for {sudoku}.")
+                    # Wait for the response
+                    response = self.response_queue.get(block=True)
+                    self.logger.debug(f"HTTP response.")
+                    
+                    self.send_response(200)
+                    self.send_header('Content-type', 'text/html')
+                    self.end_headers()
                 
-                # Send request to p2p
-                self.request_queue.put(sudoku)
-
-                # Wait for response
-                response = self.response_queue.get(block=True)
-                self.logger.debug(f"HTTP response.")
-        
-                # send request to p2p
-                self.request_queue.put(data)
-
-                self.wfile.write((response + "\n").encode("utf8"))
+                    self.wfile.write((response + "\n").encode("utf8"))
+                
+                # Handle JSON errors    
+                except (json.JSONDecodeError, KeyError) as e:
+                    self.send_response(400)
+                    self.send_header('Content-type', 'text/html')
+                    self.end_headers()
+                    
+                    error_message = f"Invalid request format: {str(e)}\n"
+                    self.wfile.write(error_message.encode("utf8"))
+                    
             else:
                 self.send_response(404)
                 self.end_headers()
-                self.wfile.write(b"404 Not Found\n")    
+                self.wfile.write(b"404 Not Found\n")
+                
+            
 
     def do_GET(self):
+        # Handle the stats request
         if self.path.endswith("/stats"):
             self.send_response(200)
-            self.send_header('Content-type','application/json')
+            self.send_header('Content-type', 'application/json')
             self.end_headers()
+            response_data = json.dumps(self.stats) + "\n"
+            self.wfile.write(response_data.encode("utf8"))
             
-            self.wfile.write((json.dumps(self.stats) + "\n").encode("utf8"))
+        # Handle the network request
         elif self.path.endswith("/network"):
             self.send_response(200)
-            self.send_header('Content-type','text/html')
+            self.send_header('Content-type', 'text/html')
             self.end_headers()
-            
-            self.wfile.write((json.dumps(self.network) + "\n").encode("utf8"))
+            response_data = json.dumps(self.network) + "\n"
+            self.wfile.write(response_data.encode("utf8")) 
         else:
             self.send_response(404)
             self.end_headers()
-            self.wfile.write(b"404 Not Found\n")    
+            self.wfile.write(b"404 Not Found\n")
+
 
 class HTTPServerThread(Thread):
     def __init__(self, logger, addr, sock, locker, request_queue, response_queue, stats, network):

@@ -58,7 +58,7 @@ class Worker:
     
     def isTaskTimeout(self):
         elapsed_time = time.time() - self.last_task_sended
-        return elapsed_time > 10 * self.task_response_time
+        return elapsed_time > 100 * self.task_response_time
 
     def crash(self):
         """Crash the worker"""
@@ -113,12 +113,17 @@ class WTManager:
 
         self.sudoku_id = 0
         self.sudokusDict: Dict[str, str] = {} # sudoku_id -> sudoku
+        self.solutionsDict: Dict[str, str] = {} # sudoku_id -> solution
 
         # tasks manager
         self.pending_tasks_queue: List[TaskID] = [] # TaskID, ..
         self.working_tasks: Dict[TaskID, Task] = {} # TaskID -> Task
 
         self.logger = logger
+
+    def pop_solution(self, task_id: TaskID) -> str:
+        """Pop the solution of the task."""
+        return self.solutionsDict.pop(task_id.sudoku_id, None)        
 
     def get_sudoku(self, task_id: TaskID) -> str:
         """Get the sudoku by its id."""
@@ -136,12 +141,11 @@ class WTManager:
         """Add a task to the pending queue."""
         self.sudoku_id += 1
         self.sudokusDict[self.sudoku_id] = sudoku
-
         emptyCells = self._count_zeros(sudoku)
         global_start = int(emptyCells * '1')
         global_end = int("1" + emptyCells * '0')
 
-        TASK_UNIT_SIZE = 100
+        TASK_UNIT_SIZE = 1000
         while global_start + TASK_UNIT_SIZE <= global_end:
             task_id = TaskID(self.sudoku_id, global_start, global_start + TASK_UNIT_SIZE)
             self.pending_tasks_queue.append(task_id)
@@ -159,10 +163,10 @@ class WTManager:
         self.workersDict[host_port] = worker
         return worker
 
-    def finish_task(self, task_id: TaskID):
+    def finish_task(self, task_id: TaskID, solution: str = None):
         """Remove a task from the working list."""
         task = self.working_tasks.get(task_id)
-        
+
         if task is not None:
             task.worker.task_done()
             del self.working_tasks[task_id]
@@ -172,6 +176,22 @@ class WTManager:
                     self.pending_tasks_queue.remove(task_id) # the responser is a dead worker
             except ValueError:
                 pass 
+
+        if solution is not None:
+            self.solutionsDict[task_id.sudoku_id] = solution
+            self.solutionsDict.pop(task_id.sudoku_id, None)
+            
+            # remove the sudoku from other workers 
+            working_copy = self.working_tasks.copy()
+            for t in working_copy.keys():
+                if t.sudoku_id == task_id.sudoku_id:
+                    self.working_tasks[t].worker.task_done() # worker is available again
+                    del self.working_tasks[t]    
+            
+            pending_copy = self.pending_tasks_queue.copy()
+            for t in pending_copy:
+                if t.sudoku_id == task_id.sudoku_id:
+                    self.pending_tasks_queue.remove(t)    
 
     def isDone(self) -> bool:
         """Check if all tasks are done."""
@@ -204,6 +224,7 @@ class WTManager:
     def unassign_task(self, task: Task):
         """Remove a task from the working list and add it back to the pending queue."""
         self.pending_tasks_queue.append(task.task_id)
+        task.worker.crash() # TODO: FIX THIS!
         del self.working_tasks[task.task_id]
 
     def get_ready_workers(self) -> List[Worker]:
@@ -223,7 +244,7 @@ class WTManager:
         for worker in self.get_alive_workers():
             if worker.isFloodingTimeout():
                 # we do not kill the socket! we just mark the worker as dead
-                self.logger.warning(f"Worker {worker.worker_address} is sleeping.")
+                self.logger.warning(f"Worker {worker.worker_address} is sleeping. [Flooding Timeout]")
                 self.kill_worker(worker.worker_address, close_socket=False)
 
     def checkTasksTimeouts(self) -> list[Task]:
@@ -234,6 +255,7 @@ class WTManager:
         for task in tasks_copy:
             if task.has_timed_out():
                 if task.has_exceeded_tries():
+                    self.logger.warning(f"Task {task.task_id} has timed out. [Exceeded Retries]")
                     # task expired
                     self.unassign_task(task) # add to pending queue
                 else:

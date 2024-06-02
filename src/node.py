@@ -1,14 +1,9 @@
-import selectors
-import time
-import socket
-import queue
-import pickle
+import selectors, time, socket, queue, pickle, sys
 from src.p2p_loadbalancer import WTManager, Worker, TaskID
 from src.p2p_server import P2PServer
 from src.http_server import HTTPServer
 from src.utils.logger import Logger
 from src.p2p_protocol import P2PProtocol 
-from src.sudoku import Sudoku
 from src.sudoku_job import SudokuJob
 from src.sudoku_algorithm import SudokuAlgorithm
 
@@ -99,6 +94,8 @@ class Node:
                 self.send_msg(worker, msg)
             else:
                 self.logger.warning(f"Failed to connect to anchor {self.anchor}.")
+                # TODO: kill the node!
+
 
 ######### Main loop
         while True:
@@ -138,6 +135,7 @@ class Node:
                 self.isHandlingHTTP = True
 
                 sudoku = http_request
+                print(sudoku)
                 self.wtManager.add_pending_task(sudoku)                  
       
             # Handle p2p requests (if any)     
@@ -225,10 +223,15 @@ class Node:
                 elif data["command"] == "SOLVE_REPLY":
                     # Store the task as solved
                     task_id = data["args"]["task_id"]
-                    self.wtManager.finish_task(task_id) 
+                    solution = data["args"]["solution"]
+                    
+                    if solution is not None:
+                        self.logger.info(f"Task solved in {task_id}.")
+                        
+                    self.wtManager.finish_task(task_id, solution) 
                     # update flooding stats
                     self.incrementedValue += 1
-                    self.logger.critical("INCREASE ONE!!!")
+                    self.logger.critical(f"INCREASE ONE!!! {task_id}")
             
                 elif data["command"] == "FLOODING_RESULT":
                     baseValueReceived = data["baseValue"]
@@ -243,7 +246,6 @@ class Node:
                     worker = self.wtManager.workersDict.get(data["replyAddress"])
                     worker.flooding_received() # update the last flooding time
                     
-                    self.logger.debug(f"P2P: Flooding result received. [{baseValueReceived}, {incrementedValueReceived}]")
                     self.logger.warning(f"[{self.pending_stats['baseValue']}, {self.incrementedValue}, {self.pending_stats['totalIncrementedValue'] }]")
                     
                 elif data["command"] == "FLOODING_CONFIRMATION":
@@ -261,8 +263,6 @@ class Node:
             if len(self.wtManager.get_alive_workers()) > 0 and self.pending_stats["numberOfResults"] >= len(self.wtManager.get_alive_workers()):
                 self.stats["baseValue"] = self.pending_stats["baseValue"] + self.pending_stats["totalIncrementedValue"] + self.pending_stats["incrementedValue"]
                 
-                self.logger.critical(f"[{self.pending_stats['baseValue']}, {self.pending_stats['incrementedValue']}, {self.pending_stats['totalIncrementedValue']}]")
-
                 # broadcast the confirmation
                 for worker in self.wtManager.get_alive_workers():
                     msg = P2PProtocol.flooding_confirmation(self.p2p_server.replyAddress, self.stats["baseValue"])
