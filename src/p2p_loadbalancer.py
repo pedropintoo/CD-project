@@ -74,6 +74,14 @@ class TaskID(NamedTuple):
     def __str__(self):
         return f"{self.sudoku_id}[{self.start}-{self.end}]"
 
+    def parse(task_id: str):
+        """Parse a task id from a string."""
+        sudoku_id, start, end = task_id.split("[")[0], task_id.split("[")[1].split("-")[0], task_id.split("-")[1][:-1] # remove the last char ']'
+        return TaskID(sudoku_id, int(start), int(end))
+
+    def get_start_end(self):
+        return self.start, self.end
+
 class Task:
     def __init__(self, task_id: TaskID, worker: Worker, tries_limit: int = 1):
         self.task_id = task_id

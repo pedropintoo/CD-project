@@ -3,7 +3,7 @@ import time
 import socket
 import queue
 import pickle
-from src.p2p_loadbalancer import WTManager, Worker
+from src.p2p_loadbalancer import WTManager, Worker, TaskID
 from src.p2p_server import P2PServer
 from src.http_server import HTTPServer
 from src.utils.logger import Logger
@@ -201,7 +201,8 @@ class Node:
                     sudoku = data["args"]["sudoku"]
                     host_port = data["replyAddress"]
                     
-                    start, end = map(int, task_id.split("-"))
+                    self.logger.critical(f"Task {task_id} received from {host_port}.")
+                    start, end = task_id.get_start_end()
         
                     # Create SudokuJob object
                     sudoku_job = SudokuJob(sudoku, start, end, self.solverConfig)
