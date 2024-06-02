@@ -8,6 +8,7 @@ from src.p2p_server import P2PServerThread
 from src.http_server import HTTPServerThread
 from src.utils.logger import Logger
 from src.p2p_protocol import P2PProtocol 
+from src.sudoku import Sudoku
 
 class Node:
     def __init__(self, host, http_port, p2p_port, anchor, handicap):
@@ -79,8 +80,31 @@ class Node:
     # DEMO propose
     def execute_task(self, task_id):
         """Execute the task and send the reply."""
-        for i in range(task_id*10, task_id*10+10):
-            time.sleep(self.handicap)
+        # for i in range(task_id*10, task_id*10+10):
+        #     time.sleep(self.handicap)
+        
+        # task is run the function check() from class Sudoku in sudoku.py
+        sudoku = Sudoku(
+            [
+                [8, 9, 7, 1, 2, 4, 6, 3, 5],
+                [5, 3, 1, 6, 7, 9, 2, 8, 4],
+                [6, 4, 2, 3, 8, 5, 1, 7, 9],
+                [1, 5, 4, 2, 9, 3, 8, 6, 7],
+                [2, 8, 9, 7, 1, 6, 4, 5, 3],
+                [3, 7, 6, 4, 5, 8, 9, 1, 2],
+                [9, 2, 3, 8, 6, 7, 5, 4, 1],
+                [7, 6, 5, 9, 4, 1, 3, 2, 8],
+                [4, 1, 8, 5, 3, 2, 7, 9, 6],
+            ]
+        )
+        result = sudoku.check()
+        
+        if result:
+            self.logger.info(f"Sudoku is valid.")
+        
+        time.sleep(self.handicap)
+        self.logger.debug(f"Task {task_id} done.")
+        
             
 
     def isToSendFlooding(self):
@@ -244,7 +268,7 @@ class Node:
                     self.pending_stats = {"baseValue": self.stats["baseValue"], "incrementedValue": 0, "totalIncrementedValue": 0, "numberOfResults": 0}    
                 
 
-            # only when I receive the result from all ALIVE nodes I will send the confirmation
+            # I will send the confirmation only when I receive the result from all ALIVE nodes 
             if len(self.wtManager.get_alive_workers()) > 0 and self.pending_stats["numberOfResults"] >= len(self.wtManager.get_alive_workers()):
                 self.stats["baseValue"] = self.pending_stats["baseValue"] + self.pending_stats["totalIncrementedValue"] + self.pending_stats["incrementedValue"]
                 

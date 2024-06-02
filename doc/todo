@@ -3,3 +3,8 @@ Optimização da distribuicao de recursos! Começar com carga baixa
 - introdução do problema do sudoku
 - nó que distribui, também realiza trabalho
 - http server - selector
+
+
+Introdução ao problema do Sudoku
+- gen.py - gera um tabuleiro de sudoku e o curl responsavel por fazer o request
+- nó que receve o request, distribui por todos os nós. Cada nó, numa fase inicial, vai correr o check do sudoku.py.
