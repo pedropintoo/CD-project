@@ -26,10 +26,10 @@ class FloodingHelloMessage(Message):
 class FloodingConfirmationMessage(Message):
     """Message to confirm the flooding result."""
 
-    def __init__(self, replyAddress: str, baseValue: int):
+    def __init__(self, replyAddress: str, stats: str):
         super().__init__("FLOODING_CONFIRMATION", replyAddress)
-        self.data["baseValue"] = baseValue
-
+        self.data["args"] = {"all": {"solved": solved, "invalid": invalid}, "nodes": nodes}
+        
 class JoinRequestMessage(Message):
     """Message to join the P2P network."""
     
@@ -68,9 +68,9 @@ class P2PProtocol:
         return FloodingHelloMessage(replyAddress, nodesList, baseValue, incrementedValue)
 
     @classmethod
-    def flooding_confirmation(cls, replyAddress: str, baseValue: int) -> FloodingConfirmationMessage:
+    def flooding_confirmation(cls, replyAddress: str, solved: int, invalid: int, nodes: str ) -> FloodingConfirmationMessage:
         """Creates a FloodingConfirmationMessage object."""
-        return FloodingConfirmationMessage(replyAddress, baseValue)
+        return FloodingConfirmationMessage(replyAddress, solved, invalid, nodes)
 
     @classmethod
     def join_request(cls, replyAddress: str) -> JoinRequestMessage:
@@ -127,7 +127,7 @@ class P2PProtocol:
         if command == "FLOODING_HELLO":
             return FloodingHelloMessage(data["replyAddress"], data["args"]["nodesList"], data["baseValue"], data["incrementedValue"])
         elif command == "FLOODING_CONFIRMATION":
-            return FloodingConfirmationMessage(data["replyAddress"],data["baseValue"])    
+            return FloodingConfirmationMessage(data["replyAddress"], data["args"]["all"]["solved"], data["args"]["all"]["invalid"], data["args"]["nodes"])    
         elif command == "JOIN_REQUEST":
             return JoinRequestMessage(data["replyAddress"])
         elif command == "JOIN_REPLY":

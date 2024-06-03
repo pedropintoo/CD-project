@@ -14,11 +14,20 @@ class Node:
         self.selector = selectors.DefaultSelector()
         self.anchor = anchor # uniform format 'host:port'
 
-        # self.stats = {"all" : {"solved": 0, "validations": 0}, "nodes": []}
+        self.stats = {"all" : {"solved": 0, "invalid": 0}, "nodes": []} # where "nodes": {"address": xx, "validations": xx}
+        
         self.stats = {"baseValue": 0}
         self.flooding_round = 0
         self.incrementedValue = 0
-        self.pending_stats = {"baseValue": 0, "incrementedValue": 0, "totalIncrementedValue": 0, "numberOfResults": 0}
+        self.pending_stats = {  "numberOfResults": 0,
+                                "all": {
+                                    "solved": 0, "internal_solved": 0, "external_solved": 0,
+                                    "invalid": 0, "internal_invalid": 0, "external_invalid": 0,
+                                },
+                                "nodes": []    
+                            }
+
+        self.pending_stats = {"baseValue": 0, "incrementedValue": 0, "totalIncrementedValue": 0, "numberOfResults": 0}        
         
         self.network = {}
         
@@ -36,6 +45,8 @@ class Node:
         self.wtManager = WTManager(self.logger)
         
         self.solverConfig = SudokuAlgorithm(logger= self.logger, handicap = self.handicap)
+
+    
 
     def connectWorker(self, host_port) -> Worker:
         """Connect to a peer."""
@@ -78,6 +89,10 @@ class Node:
     def isToSendFlooding(self):
         """Check if it is time to send a flooding message."""
         return (time.time() - self.last_flooding) > self.TIME_TO_FLOODING
+
+    def updateStats(self, firstCell, secondCell):
+        """Update Stats."""
+        self.stats[firstCell][secondCell] = self.stats[firstCell][secondCell] + self.stats[firstCell]["internal_"+secondCell] + self.stats[firstCell]["external_"+secondCell]
 
     def run(self):
         """Run the node."""
@@ -260,22 +275,33 @@ class Node:
                     solution = data["args"]["solution"]
                                             
                     self.wtManager.finish_task(task_id, solution) 
-                    # update flooding stats
-                    self.incrementedValue += 1
-                    self.logger.critical(f"INCREASE ONE!!! {task_id} {solution}")
+
+                    # validations = task_id.end - task_id.start
+                    # # update flooding stats
+                    # self.incrementedValue += validations
+                    self.logger.critical(f"Increment validations {solution} by [{task_id}].")
 
 
             # I will send the confirmation only when I receive the result from all ALIVE nodes 
             if len(self.wtManager.get_alive_workers()) > 0 and self.pending_stats["numberOfResults"] >= len(self.wtManager.get_alive_workers()):
-                self.stats["baseValue"] = self.pending_stats["baseValue"] + self.pending_stats["totalIncrementedValue"] + self.pending_stats["incrementedValue"]
+                updateStats("all","solved")
+                updateStats("all","invalid")
+                # self.stats["baseValue"] = self.pending_stats["baseValue"] + self.pending_stats["totalIncrementedValue"] + self.pending_stats["incrementedValue"]
                 
                 # broadcast the confirmation
                 for worker in self.wtManager.get_alive_workers():
-                    msg = P2PProtocol.flooding_confirmation(self.p2p_server.replyAddress, self.stats["baseValue"])
+                    msg = P2PProtocol.flooding_confirmation(self.p2p_server.replyAddress, self.stats)
                     self.send_msg(worker, msg)
                 
                 # setup for the next round
-                self.pending_stats = {"baseValue": self.stats["baseValue"], "incrementedValue": 0, "totalIncrementedValue": 0, "numberOfResults": 0}
+                self.pending_stats = {  "numberOfResults": 0,
+                                "all": {
+                                    "solved": self.stats["all"]["solved"], "internal_solved": 0, "external_solved": 0,
+                                    "invalid": self.stats["all"]["invalid"], "internal_invalid": 0, "external_invalid": 0,
+                                },
+                                "nodes": []    
+                            }
+                # self.pending_stats = {"baseValue": self.stats["baseValue"], "incrementedValue": 0, "totalIncrementedValue": 0, "numberOfResults": 0}
                 
                 # self.flooding_round += 1
             
@@ -293,9 +319,11 @@ class Node:
                     solution = self.wtManager.solutionsDict.popitem()[1] # the first element is the sudoku_id solved!
                     self.logger.info(f"HTTP: Task done! {solution}")
                     self.http_server.response_queue.put(solution)
+                    self.pending_stats["all"]["internal_solved"] += 1
                 else:    
                     self.http_server.response_queue.put(None)
                     self.logger.debug("HTTP: Task done! [No solution]")
+                    self.pending_stats["all"]["internal_invalid"] += 1
             else:
             # manage tasks assignments and timeouts
                 retry_tasks = self.wtManager.checkTasksTimeouts() # tasks to retry, the timeout ones were all in the pending queue!
