@@ -60,7 +60,7 @@ class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.end_headers()
-            response_data = json.dumps(self.stats) + "\n"
+            response_data = json.dumps(self.stats, indent=4) + "\n"
             self.wfile.write(response_data.encode("utf8"))
             
         # Handle the network request
@@ -68,7 +68,7 @@ class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
             self.end_headers()
-            response_data = json.dumps(self.network) + "\n"
+            response_data = json.dumps(self.network, indent=4) + "\n"
             self.wfile.write(response_data.encode("utf8")) 
         else:
             self.send_response(404)

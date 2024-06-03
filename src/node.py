@@ -133,7 +133,6 @@ class Node:
                 self.isHandlingHTTP = True
 
                 sudoku = http_request
-                print(sudoku)
                 self.wtManager.add_pending_task(sudoku)                  
       
             # Handle p2p requests (if any)     
@@ -145,6 +144,7 @@ class Node:
                 if data["command"] == "FLOODING_HELLO":
                     #### update the network
                     host_port = data["replyAddress"]
+                    nodesList = data["args"]["nodesList"]
 
                     worker = self.wtManager.workersDict.get(host_port)
                     # Add or update the node that sent the flooding message
@@ -155,8 +155,9 @@ class Node:
                             # worker was dead and socket must be reconnected
                             self.connectWorker(host_port)
 
+                    self.network[host_port] = nodesList
                     # Add nodes that current node does not have
-                    for host_port in data["args"]["nodesList"]:
+                    for host_port in nodesList:
                         # Skip if the node is the same as the current node
                         if host_port == self.p2p_server.replyAddress:
                             continue
@@ -211,7 +212,7 @@ class Node:
 
                 elif data["command"] == "JOIN_REPLY":
                     nodesList = data["args"]["nodesList"].copy() # list of nodes to send in next flooding
-                    nodesList.remove(self.p2p_server.replyAddress) # himself b# TODO: ELE NUMA SEGUNDA RECONECAO PODE ESTAR MORTO E NAO APARECE AQU!
+                    nodesList.remove(self.p2p_server.replyAddress) # himself
                     nodesList.append(self.anchor) # how send the join reply
 
                     # Send flooding hello message for each node

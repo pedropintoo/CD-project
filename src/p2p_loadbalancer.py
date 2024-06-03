@@ -36,7 +36,6 @@ class Worker:
         self.isAvailable = True
         self.update_task_response_time()
 
-
     def update_task_response_time(self):
         """Update the task response time given a new response."""
         elapsed_time = time.time() - self.last_task_sended
