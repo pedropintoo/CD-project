@@ -107,23 +107,22 @@ class Node:
     def commitPendingStats(self, baseName=None, commitNodes=False):
         """Commit Pending Stats."""
         # stat = self.pending_stats["all"][baseName] ???
-        self.pending_stats["all"][baseName] += self.pending_stats["all"]["uncommitted_"+baseName]
+        self.pending_stats["all"]["internal_"+baseName] = self.pending_stats["all"]["uncommitted_"+baseName]
         self.pending_stats["all"]["uncommitted_"+baseName] = 0
         # TODO: nodes stats
 
     def updateWithReceivedStats(self, stats, baseName=None, updateNodes=False):
         """Update Stats with Received Stats."""
+        myBaseValue = self.pending_stats["all"][baseName] # from pending stats
         baseValueReceived = stats["all"][baseName]
         incrementedValueReceived = stats["all"]["internal_"+baseName]
-        myPendingBaseValue = self.pending_stats["all"][baseName]
-        self.logger.debug(f"Update {baseName} to [{baseValueReceived}].")
 
-        if baseValueReceived > myPendingBaseValue:
+        if baseValueReceived > myBaseValue:
             self.pending_stats["all"][baseName] = baseValueReceived
             self.pending_stats["all"]["internal_"+baseName] = 0
-            self.pending_stats["all"]["external_"+baseName] = 0
+            self.pending_stats["all"]["external_"+baseName] = incrementedValueReceived
             self.pending_stats["numberOfResults"] = 0
-        elif baseValueReceived < myPendingBaseValue:
+        elif baseValueReceived < myBaseValue:
             self.pending_stats["numberOfResults"] += 1
         else:
             self.pending_stats["numberOfResults"] += 1
@@ -133,8 +132,8 @@ class Node:
 
     def updateWithConfirmedStats(self, stats, host_port, baseName=None, updateNodes=False):
         """Update Stats with Confirmed Stats."""
+        myBaseValue = self.pending_stats["all"][baseName] + self.pending_stats["all"]["internal_"+baseName] + self.pending_stats["all"]["external_"+baseName]
         baseValueReceived = stats["all"][baseName]
-        myBaseValue = self.stats["all"][baseName]
 
         if baseValueReceived > myBaseValue:
             self.stats["all"][baseName] = baseValueReceived
@@ -144,8 +143,7 @@ class Node:
 
         self.pending_stats["all"][baseName] = self.stats["all"][baseName]
         self.pending_stats["all"]["internal_"+baseName] = 0
-        self.pending_stats["all"]["external_"+baseName] = 0
-        # not the uncommitted !!!
+        self.pending_stats["all"]["external_"+baseName] = 0 # not the uncommitted !!!
         self.pending_stats["all"]["numberOfResults"] = 0
         # TODO: nodes stats
 
@@ -185,8 +183,7 @@ class Node:
                     msg = P2PProtocol.flooding_hello(self.p2p_server.replyAddress, list(self.wtManager.get_alive_workers_address()), self.pending_stats.copy())
                     self.send_msg(worker, msg)
                 self.last_flooding = time.time()
-                self.logger.info(self.stats.__hash__)
-                self.logger.info(self.stats)
+
                 self.updateNetwork()
 
             self.wtManager.checkWorkersFloodingTimeouts() # kill inactive workers (if any)   
@@ -326,13 +323,15 @@ class Node:
                     # Store the task as solved
                     task_id = data["args"]["task_id"]
                     solution = data["args"]["solution"]
-                                            
+                    # worker = task_id.worker WRONG!!! task_id not have worker!
+
                     self.wtManager.finish_task(task_id, solution) 
 
                     validations = task_id.end - task_id.start
                     # # update flooding stats
+                    # worker.validations += validations
                     self.pending_stats["all"]["uncommitted_validations"] += validations
-                    self.logger.critical(f"Increment validations.")
+                    self.logger.critical(f"Increment validations on worker {worker.worker_address}.")
 
 
             # I will send the confirmation only when I receive the result from all ALIVE nodes 
