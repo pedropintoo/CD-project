@@ -1,5 +1,6 @@
 import time
 from collections import deque
+from src.utils.logger import Logger
 
 class SudokuAlgorithm:
     def __init__(self, sudoku = None, base_delay=0.01, interval=10, threshold=5):
@@ -33,22 +34,34 @@ class SudokuAlgorithm:
 
         return string_representation
 
-    # def calculate_delay_params(self, handicap_ms, num_requests):
-    #     # Define arbitrary proportions for interval and threshold
-    #     interval = 10  # interval to check if the number of requests exceeds the threshold
-    #     threshold = 5  # limit of allowed calls
+    def calculate_delay_params(self, handicap_ms):
+        # Define arbitrary proportions for interval and threshold
+        interval = 10  # interval to check if the number of requests exceeds the threshold
+        threshold = 5  # limit of allowed calls
 
-    #     # Convert handicap from milliseconds to seconds
-    #     handicap_seconds = handicap_ms / 1000.0
+        # Convert handicap from milliseconds to seconds
+        handicap_seconds = handicap_ms / 1000.0
 
-    #     # Calculate base_delay: total handicap divided by the number of calls exceeding the threshold
-    #     # Ensure we only apply base_delay if num_requests exceeds threshold
-    #     if num_requests > threshold:
-    #         base_delay = handicap_seconds / (num_requests - threshold) # the delay is applied proportionally based on the excess number of requests.
-    #     else:
-    #         base_delay = 0  # No delay needed if the number of requests does not exceed the threshold
+        # Calculate base_delay: total handicap divided by the number of calls exceeding the threshold
+        # Ensure we only apply base_delay if num_requests exceeds threshold
+        
+        current_time = time.time()
+        self.recent_requests.append(current_time)
+        
+        # number of requests made in the last interval
+        num_requests = len(
+            [t for t in self.recent_requests if current_time - t < interval]
+        )
+        
+        # If the number of requests exceeds the threshold, the delay increases
+        if num_requests > threshold:
+            base_delay = handicap_seconds / (num_requests - threshold) # the delay is applied proportionally based on the excess number of requests.
+        else:
+            base_delay = 0.01
+            interval = 10
+            threshold = 5
 
-    #     return base_delay, interval, threshold
+        return base_delay, interval, threshold
     
     
     def _limit_calls(self, base_delay=0.01, interval=10, threshold=5):

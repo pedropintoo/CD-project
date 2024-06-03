@@ -5,5 +5,5 @@
 | `JOIN_REPLY` | Joining node | ```{'command': 'JOIN_REPLY', 'args': {'nodesList': ['host:port']}}``` |
 | `SOLVE_REQUEST` | Any node | ```{'command': 'SOLVE_REQUEST', 'replyAddress': 'host:port', 'args': {'task_id': task_id , 'sudoku': sudoku} }``` |
 | `SOLVE_REPLY` | Node that made the request | ```{'command': 'SOLVE_REPLY', 'replyAddress': 'host:port', 'args': {'task_id': task_id, 'solution': solution} }``` |
-| `FLOODING_RESULT` | Any node | ```{'command': 'FLOODING_RESULT', 'round':round ,'baseValue': baseValue, 'incrementedValue': incrementedValue}``` |
-| `FLOODING_CONFIRMATION` | Any node | ```{'command': 'FLOODING_CONFIRMATION', 'round':round ,'baseValue': baseValue}``` |
+| `FLOODING_RESULT` | Any node | ```{'command': 'FLOODING_RESULT', 'replyAddress': 'host:port', 'baseValue': baseValue, 'incrementedValue': incrementedValue, 'args': {'nodesList': ['host:port']}}}``` |
+| `FLOODING_CONFIRMATION` | Any node | ```{'command': 'FLOODING_CONFIRMATION', 'baseValue': baseValue}``` |

@@ -34,8 +34,23 @@ class Node:
 
         # Workers & Tasks Manager (load balancer)
         self.wtManager = WTManager(self.logger)
-
-        self.solverConfig = SudokuAlgorithm() 
+        
+        self.solverConfig = self.initialize_solver_config()
+    
+    def initialize_solver_config(self):
+        # Instantiate a SudokuAlgorithm object
+        algorithm = SudokuAlgorithm()
+        
+        if self.handicap == 0:
+            # Return the SudokuAlgorithm object with the default parameters
+            return algorithm
+        
+        # Calculate the parameters for the algorithm
+        base_delay, interval, threshold = algorithm.calculate_delay_params(self.handicap)
+        
+        self.logger.error(f"Base delay: {base_delay}, Interval: {interval}, Threshold: {threshold}, Handicap: {self.handicap}")
+        # Return the SudokuAlgorithm object with the calculated parameters
+        return SudokuAlgorithm(base_delay, interval, threshold)  
 
 
     def connectWorker(self, host_port) -> Worker:
@@ -105,7 +120,7 @@ class Node:
                 
                 for worker in self.wtManager.get_alive_workers():
                     self.logger.debug(f"P2P: Sending flooding consensus to {worker.worker_address} [{self.pending_stats['baseValue']}, {self.pending_stats['incrementedValue']}]")
-                    msg = P2PProtocol.flooding_result(self.p2p_server.replyAddress, self.pending_stats["baseValue"], self.pending_stats["incrementedValue"])
+                    msg = P2PProtocol.flooding_hello(self.p2p_server.replyAddress, list(self.wtManager.get_alive_workers_address()), self.pending_stats["baseValue"], self.pending_stats["incrementedValue"])
                     self.send_msg(worker, msg)
                 self.last_flooding = time.time()
 
@@ -143,12 +158,13 @@ class Node:
                 data = p2p_request.data # get data attribute from the message
                 self.logger.debug(f"P2P-received: {data['command']}")
                 
-                # Switch from the command
-                if data["command"] == "HELLO":
+                # Switch from the command received
+                if data["command"] == "FLOODING_HELLO":
+                    #### update the network
                     host_port = data["replyAddress"]
 
                     worker = self.wtManager.workersDict.get(host_port)
-                    # Add or update the node that sent the hello message
+                    # Add or update the node that sent the flooding message
                     if worker is None:
                         self.connectWorker(host_port)
                     else:
@@ -156,7 +172,6 @@ class Node:
                             # worker was dead and socket must be reconnected
                             self.connectWorker(host_port)
 
-                    # TODO: to be removed  
                     # Add nodes that current node does not have
                     for host_port in data["args"]["nodesList"]:
                         # Skip if the node is the same as the current node
@@ -164,24 +179,42 @@ class Node:
                             continue
 
                         if self.wtManager.workersDict.get(host_port) is None:
-                            self.connectWorker(host_port)
-                            
-                elif data["command"] == "FLOODING_RESULT":
+                            self.connectWorker(host_port)        
+
+                    #### updating the stats
                     baseValueReceived = data["baseValue"]
                     incrementedValueReceived = data["incrementedValue"]
-                    
-                    # TODO: if baseValue is less than i need to ignore the message
-                    # TODO: if baseValue is greater than i need to update the baseValue and forget the incrementedValue
-
-                    self.pending_stats["baseValue"] = max(self.pending_stats["baseValue"], baseValueReceived)
-                    
-                    self.pending_stats["numberOfResults"] += 1
-                    self.pending_stats["totalIncrementedValue"] += incrementedValueReceived  
+                                        
+                    if baseValueReceived > self.pending_stats["baseValue"]:
+                        self.pending_stats["baseValue"] = baseValueReceived
+                        self.pending_stats["incrementedValue"] = 0
+                        self.pending_stats["totalIncrementedValue"] = 0
+                        self.pending_stats["numberOfResults"] = 0 # i cannot send the confirmation!!
+                        self.incrementedValue = 0
+                    elif baseValueReceived < self.pending_stats["baseValue"]:
+                        self.pending_stats["numberOfResults"] += 1
+                    else:                        
+                        self.pending_stats["numberOfResults"] += 1
+                        self.pending_stats["totalIncrementedValue"] += incrementedValueReceived  
 
                     worker = self.wtManager.workersDict.get(data["replyAddress"])
                     worker.flooding_received() # update the last flooding time
                     
                     self.logger.warning(f"[{self.pending_stats['baseValue']}, {self.incrementedValue}, {self.pending_stats['totalIncrementedValue'] }]")
+
+                elif data["command"] == "FLOODING_CONFIRMATION":
+                    # update baseValue if someone has a higher value (or higher round)
+                    baseValueReceived = data["baseValue"]
+                    
+                    if baseValueReceived > self.pending_stats["baseValue"]:
+                        self.stats["baseValue"] = baseValueReceived
+                        self.logger.critical(f"Update baseValue to [{self.stats['baseValue']}].")
+                    elif baseValueReceived < self.pending_stats["baseValue"]:
+                        self.logger.critical(f"Discard baseValue [{baseValueReceived}] from {data['replyAddress']}.")
+                    else:
+                        self.logger.critical(f"Confirmed baseValue to {self.stats['baseValue']}.")
+                    
+                    self.pending_stats = {"baseValue": self.stats["baseValue"], "incrementedValue": 0, "totalIncrementedValue": 0, "numberOfResults": 0} 
 
                 elif data["command"] == "JOIN_REQUEST":
                     host_port = data["replyAddress"]
@@ -194,11 +227,11 @@ class Node:
                     self.send_msg(worker, msg)
 
                 elif data["command"] == "JOIN_REPLY":
-                    nodesList = data["args"]["nodesList"].copy() # list of nodes to send in hello message
-                    nodesList.remove(self.p2p_server.replyAddress) # himself b# ELE NUMA SEGUNDA RECONECAO PODE ESTAR MORTO E NAO APARECE AQU!
+                    nodesList = data["args"]["nodesList"].copy() # list of nodes to send in next flooding
+                    nodesList.remove(self.p2p_server.replyAddress) # himself b# TODO: ELE NUMA SEGUNDA RECONECAO PODE ESTAR MORTO E NAO APARECE AQU!
                     nodesList.append(self.anchor) # how send the join reply
 
-                    # Send hello message for each node
+                    # Send flooding hello message for each node
                     for host_port in nodesList:
 
                         if host_port == self.anchor:
@@ -206,7 +239,7 @@ class Node:
                         else:
                             worker = self.connectWorker(host_port)
 
-                        msg = P2PProtocol.hello(self.p2p_server.replyAddress, nodesList) 
+                        msg = P2PProtocol.flooding_hello(self.p2p_server.replyAddress, nodesList)
                         self.send_msg(worker, msg)
 
                 elif data["command"] == "SOLVE_REQUEST":
@@ -246,17 +279,7 @@ class Node:
                     # update flooding stats
                     self.incrementedValue += 1
                     self.logger.critical(f"INCREASE ONE!!! {task_id} {solution}")
-                    
-                elif data["command"] == "FLOODING_CONFIRMATION":
-                    # update baseValue if someone has a higher value (or higher round)
-                    baseValueReceived = data["baseValue"]
-                    
-                    # TODO: check if round has been confirmed
 
-                    self.stats["baseValue"] = max(self.pending_stats["baseValue"], baseValueReceived)
-
-                    self.pending_stats = {"baseValue": self.stats["baseValue"], "incrementedValue": 0, "totalIncrementedValue": 0, "numberOfResults": 0}    
-                
 
             # I will send the confirmation only when I receive the result from all ALIVE nodes 
             if len(self.wtManager.get_alive_workers()) > 0 and self.pending_stats["numberOfResults"] >= len(self.wtManager.get_alive_workers()):

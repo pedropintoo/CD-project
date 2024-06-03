@@ -13,12 +13,22 @@ class Message:
     def to_bytes(self) -> bytes:
         return pickle.dumps(self.data)
 
-class HelloMessage(Message):
-    """Message to say hello to the P2P network."""
 
-    def __init__(self, replyAddress: str, nodesList: list):
-        super().__init__("HELLO", replyAddress)
+class FloodingHelloMessage(Message):
+    """Message to communicate baseValue and incrementedValue."""
+
+    def __init__(self, replyAddress: str, nodesList: list, baseValue: int, incrementedValue: int):
+        super().__init__("FLOODING_HELLO", replyAddress)
+        self.data["baseValue"] = baseValue
+        self.data["incrementedValue"] = incrementedValue
         self.data["args"] = {"nodesList": nodesList}
+
+class FloodingConfirmationMessage(Message):
+    """Message to confirm the flooding result."""
+
+    def __init__(self, replyAddress: str, baseValue: int):
+        super().__init__("FLOODING_CONFIRMATION", replyAddress)
+        self.data["baseValue"] = baseValue
 
 class JoinRequestMessage(Message):
     """Message to join the P2P network."""
@@ -47,29 +57,21 @@ class SolveReplyMessage(Message):
         super().__init__("SOLVE_REPLY", replyAddress)
         self.data["args"] = {"task_id": task_id, "solution": solution}
 
-class FloodingResultMessage(Message):
-    """Message to communicate baseValue and incrementedValue."""
 
-    def __init__(self, replyAddress: str, baseValue: int, incrementedValue: int):
-        super().__init__("FLOODING_RESULT", replyAddress)
-        self.data["baseValue"] = baseValue
-        self.data["incrementedValue"] = incrementedValue
-
-class FloodingConfirmationMessage(Message):
-    """Message to confirm the flooding result."""
-
-    def __init__(self, replyAddress: str, baseValue: int):
-        super().__init__("FLOODING_CONFIRMATION", replyAddress)
-        self.data["baseValue"] = baseValue
     
 class P2PProtocol:
     """P2P Protocol."""
     
     @classmethod
-    def hello(cls, replyAddress: str, nodesList: list) -> HelloMessage:
-        """Creates a HelloMessage object."""
-        return HelloMessage(replyAddress, nodesList)
-    
+    def flooding_hello(cls, replyAddress: str, nodesList: list, baseValue: int = 0, incrementedValue: int = 0) -> FloodingHelloMessage:
+        """Creates a SolveRequestMessage object."""
+        return FloodingHelloMessage(replyAddress, nodesList, baseValue, incrementedValue)
+
+    @classmethod
+    def flooding_confirmation(cls, replyAddress: str, baseValue: int) -> FloodingConfirmationMessage:
+        """Creates a FloodingConfirmationMessage object."""
+        return FloodingConfirmationMessage(replyAddress, baseValue)
+
     @classmethod
     def join_request(cls, replyAddress: str) -> JoinRequestMessage:
         """Creates a JoinRequestMessage object."""
@@ -89,16 +91,6 @@ class P2PProtocol:
     def solve_reply(cls, replyAddress: str, task_id: TaskID, solution: str = None) -> SolveReplyMessage:
         """Creates a SolveRequestMessage object."""
         return SolveReplyMessage(replyAddress, task_id, solution)
-
-    @classmethod
-    def flooding_result(cls, replyAddress: str, baseValue: int, incrementedValue: int) -> FloodingResultMessage:
-        """Creates a SolveRequestMessage object."""
-        return FloodingResultMessage(replyAddress, baseValue, incrementedValue)
-
-    @classmethod
-    def flooding_confirmation(cls, replyAddress: str, baseValue: int) -> FloodingConfirmationMessage:
-        """Creates a FloodingConfirmationMessage object."""
-        return FloodingConfirmationMessage(replyAddress, baseValue)
     
     @classmethod
     def send_msg(cls, socket: socket, msg: Message):
@@ -132,8 +124,10 @@ class P2PProtocol:
         
         command = data.get("command") 
 
-        if command == "HELLO":
-            return HelloMessage(data["replyAddress"], data["args"]["nodesList"])
+        if command == "FLOODING_HELLO":
+            return FloodingHelloMessage(data["replyAddress"], data["args"]["nodesList"], data["baseValue"], data["incrementedValue"])
+        elif command == "FLOODING_CONFIRMATION":
+            return FloodingConfirmationMessage(data["replyAddress"],data["baseValue"])    
         elif command == "JOIN_REQUEST":
             return JoinRequestMessage(data["replyAddress"])
         elif command == "JOIN_REPLY":
@@ -142,10 +136,6 @@ class P2PProtocol:
             return SolveRequestMessage(data["replyAddress"], data["args"]["task_id"], data["args"]["sudoku"])
         elif command == "SOLVE_REPLY":
             return SolveReplyMessage(data["replyAddress"], data["args"]["task_id"], data["args"]["solution"])
-        elif command == "FLOODING_RESULT":
-            return FloodingResultMessage(data["replyAddress"],data["baseValue"], data["incrementedValue"])
-        elif command == "FLOODING_CONFIRMATION":
-            return FloodingConfirmationMessage(data["replyAddress"],data["baseValue"])
         else:
             raise P2PProtocolBadFormat(received)
 
