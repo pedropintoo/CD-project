@@ -134,6 +134,7 @@ class Node:
         """Update Stats with Confirmed Stats."""
         myBaseValue = self.pending_stats["all"][baseName] + self.pending_stats["all"]["internal_"+baseName] + self.pending_stats["all"]["external_"+baseName]
         baseValueReceived = stats["all"][baseName]
+        self.stats["all"][baseName] = myBaseValue
 
         if baseValueReceived > myBaseValue:
             self.stats["all"][baseName] = baseValueReceived
@@ -323,13 +324,14 @@ class Node:
                     # Store the task as solved
                     task_id = data["args"]["task_id"]
                     solution = data["args"]["solution"]
-                    # worker = task_id.worker WRONG!!! task_id not have worker!
+                    host_port = data["replyAddress"]
+                    worker = self.wtManager.workersDict.get(host_port)
 
                     self.wtManager.finish_task(task_id, solution) 
 
                     validations = task_id.end - task_id.start
                     # # update flooding stats
-                    # worker.validations += validations
+                    worker.validations += validations
                     self.pending_stats["all"]["uncommitted_validations"] += validations
                     self.logger.critical(f"Increment validations on worker {worker.worker_address}.")
 
