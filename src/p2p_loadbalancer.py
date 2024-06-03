@@ -142,7 +142,7 @@ class WTManager:
         global_start = int(emptyCells * '1')
         global_end = int("1" + emptyCells * '0')
 
-        TASK_UNIT_SIZE = 1000
+        TASK_UNIT_SIZE = 1000 # TODO: changed in run time !!
         while global_start + TASK_UNIT_SIZE <= global_end:
             task_id = TaskID(self.sudoku_id, global_start, global_start + TASK_UNIT_SIZE)
             self.pending_tasks_queue.append(task_id)

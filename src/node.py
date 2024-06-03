@@ -35,7 +35,7 @@ class Node:
         # Workers & Tasks Manager (load balancer)
         self.wtManager = WTManager(self.logger)
         
-        self.solverConfig = SudokuAlgorithm(logger= self.logger)
+        self.solverConfig = SudokuAlgorithm(logger= self.logger, handicap=handicap)
 
     def connectWorker(self, host_port) -> Worker:
         """Connect to a peer."""
@@ -98,7 +98,6 @@ class Node:
 
 ######### Main loop
         while True:
-            # TODO: flooding protocol
             if self.isToSendFlooding():
                 self.pending_stats["incrementedValue"] = self.incrementedValue
                 
@@ -227,7 +226,6 @@ class Node:
                         self.send_msg(worker, msg)
 
                 elif data["command"] == "SOLVE_REQUEST":
-                    # TODO: create an object SudokuJob from sudoku_job.py and receive the boolean result from him 
                     
                     task_id = data["args"]["task_id"]
                     sudoku = data["args"]["sudoku"]
@@ -239,7 +237,7 @@ class Node:
                     # Create SudokuJob object
                     sudoku_job = SudokuJob(sudoku, start, end, self.solverConfig)
                     
-                    # Execute the task using SudokuJob (TODO: thread this)
+                    # Execute the task using SudokuJob (TODO: maybe thread this)
                     solution = sudoku_job.run()
 
                     worker = self.wtManager.workersDict.get(host_port)
