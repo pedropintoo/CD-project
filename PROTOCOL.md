@@ -43,7 +43,6 @@
                 { 
                     "address": "host:port", 
                     "validations": 0, 
-                    "internal_validations": 0, 
                 }, 
                 ... 
             ]
