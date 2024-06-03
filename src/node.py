@@ -15,16 +15,15 @@ class Node:
         self.anchor = anchor # uniform format 'host:port'
 
         self.stats = {
-            "all" : 
-            {
+            "all": {
                 "solved": 0, 
                 "invalid": 0, 
                 "validations": 0 # sum of nodes validations
-            }, 
+            },
             "nodes": [
                 # { "address": "host:port", "validations": 0}, ..
             ]
-        } 
+        }
         
         self.pending_stats = {  
             "numberOfResults": 0,
@@ -108,7 +107,7 @@ class Node:
     def commitPendingStats(self, baseName=None, commitNodes=False):
         """Commit Pending Stats."""
         # stat = self.pending_stats["all"][baseName] ???
-        self.pending_stats["all"][baseName] = self.pending_stats["all"]["uncommitted_"+baseName]
+        self.pending_stats["all"][baseName] += self.pending_stats["all"]["uncommitted_"+baseName]
         self.pending_stats["all"]["uncommitted_"+baseName] = 0
         # TODO: nodes stats
 
@@ -116,13 +115,13 @@ class Node:
         """Update Stats with Received Stats."""
         baseValueReceived = stats["all"][baseName]
         incrementedValueReceived = stats["all"]["internal_"+baseName]
-        myPendingBaseValue = self.stats["all"][baseName]
+        myPendingBaseValue = self.pending_stats["all"][baseName]
         self.logger.debug(f"Update {baseName} to [{baseValueReceived}].")
+
         if baseValueReceived > myPendingBaseValue:
             self.pending_stats["all"][baseName] = baseValueReceived
             self.pending_stats["all"]["internal_"+baseName] = 0
             self.pending_stats["all"]["external_"+baseName] = 0
-            self.pending_stats["all"]["uncommitted_"+baseName] = 0
             self.pending_stats["numberOfResults"] = 0
         elif baseValueReceived < myPendingBaseValue:
             self.pending_stats["numberOfResults"] += 1
@@ -183,10 +182,11 @@ class Node:
                 
                 for worker in self.wtManager.get_alive_workers():
                     self.logger.debug(f"P2P: Sending flooding consensus to {worker.worker_address}.")
-                    msg = P2PProtocol.flooding_hello(self.p2p_server.replyAddress, list(self.wtManager.get_alive_workers_address()), self.pending_stats)
+                    msg = P2PProtocol.flooding_hello(self.p2p_server.replyAddress, list(self.wtManager.get_alive_workers_address()), self.pending_stats.copy())
                     self.send_msg(worker, msg)
                 self.last_flooding = time.time()
-
+                self.logger.info(self.stats.__hash__)
+                self.logger.info(self.stats)
                 self.updateNetwork()
 
             self.wtManager.checkWorkersFloodingTimeouts() # kill inactive workers (if any)   
@@ -293,7 +293,7 @@ class Node:
                         else:
                             worker = self.connectWorker(host_port)
 
-                        msg = P2PProtocol.flooding_hello(self.p2p_server.replyAddress, aliveNodes, self.pending_stats)
+                        msg = P2PProtocol.flooding_hello(self.p2p_server.replyAddress, aliveNodes, self.pending_stats.copy())
                         self.send_msg(worker, msg)
 
                 elif data["command"] == "SOLVE_REQUEST":                    
@@ -344,7 +344,7 @@ class Node:
                 
                 # broadcast the confirmation
                 for worker in self.wtManager.get_alive_workers():
-                    msg = P2PProtocol.flooding_confirmation(self.p2p_server.replyAddress, self.stats)
+                    msg = P2PProtocol.flooding_confirmation(self.p2p_server.replyAddress, self.stats.copy())
                     self.send_msg(worker, msg)
                 
                 # setup for the next round
