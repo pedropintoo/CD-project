@@ -154,6 +154,13 @@ class Node:
         for worker in self.wtManager.get_alive_workers():
             self.network[worker.worker_address] = worker.network
 
+    def updateWorkersStats(self):
+        """Update workers stats."""
+        for worker in self.wtManager.workersDict.values():
+            self.logger.debug(f"{worker.worker_address} -> {worker.validations}")
+            # Now we need to extend the logic to clients validations
+        # TODO: extend to herself !! when the dispatcher node makes checks.    
+
     def run(self):
         """Run the node."""
         self.http_server.start()
@@ -168,7 +175,7 @@ class Node:
                 self.send_msg(worker, msg)
             else:
                 self.logger.warning(f"Failed to connect to anchor {self.anchor}.")
-                # TODO: kill the node!
+                # TODO: kill the node! Also when CTRL-C this must kill the node...
 
 
 ######### Main loop
@@ -186,6 +193,7 @@ class Node:
                 self.last_flooding = time.time()
 
                 self.updateNetwork()
+                self.updateWorkersStats()
 
             self.wtManager.checkWorkersFloodingTimeouts() # kill inactive workers (if any)   
 
