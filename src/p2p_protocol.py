@@ -12,23 +12,38 @@ class Message:
 
     def to_bytes(self) -> bytes:
         return pickle.dumps(self.data)
-
-
+    
 class FloodingHelloMessage(Message):
     """Message to communicate baseValue and incrementedValue."""
-
-    def __init__(self, replyAddress: str, nodesList: list, baseValue: int, incrementedValue: int):
-        super().__init__("FLOODING_HELLO", replyAddress)
-        self.data["baseValue"] = baseValue
-        self.data["incrementedValue"] = incrementedValue
-        self.data["args"] = {"nodesList": nodesList}
-
+    
+    def __init__(self, replyAddress: str, aliveNodes: list, pending_stats: dict):
+        super().__init__("FLOODING_HELLO", replyAddress)       
+         
+        stats = {
+            "all": {
+                "solved": pending_stats["all"]["solved"], "internal_solved": pending_stats["all"]["internal_solved"],
+                "invalid": pending_stats["all"]["invalid"], "internal_invalid": pending_stats["all"]["internal_invalid"],
+                "validations": pending_stats["all"]["validations"], "internal_validations": pending_stats["all"]["internal_validations"]
+            }, 
+            "nodes": [] # TODO
+        } 
+        self.data["args"] = {"aliveNodes": aliveNodes, "stats": stats}
+        
 class FloodingConfirmationMessage(Message):
     """Message to confirm the flooding result."""
 
-    def __init__(self, replyAddress: str, stats: str):
+    def __init__(self, replyAddress: str, stats: dict):
         super().__init__("FLOODING_CONFIRMATION", replyAddress)
-        self.data["args"] = {"all": {"solved": solved, "invalid": invalid}, "nodes": nodes}
+        
+        stats = {
+            "all": {
+                "solved": stats["all"]["solved"], 
+                "invalid": stats["all"]["invalid"], 
+                "validations": stats["all"]["validations"]
+            }, 
+            "nodes": [] # TODO
+        } 
+        self.data["args"] = {"stats": stats}
         
 class JoinRequestMessage(Message):
     """Message to join the P2P network."""
@@ -39,9 +54,9 @@ class JoinRequestMessage(Message):
 class JoinReplyMessage(Message):
     """Message to replay to a joining node."""
     
-    def __init__(self, nodesList: list):
+    def __init__(self, aliveNodes: list):
         super().__init__("JOIN_REPLY")
-        self.data["args"] = {"nodesList": nodesList}
+        self.data["args"] = {"aliveNodes": aliveNodes}
 
 class SolveRequestMessage(Message):
     """Message to request to solve a task."""
@@ -57,20 +72,19 @@ class SolveReplyMessage(Message):
         super().__init__("SOLVE_REPLY", replyAddress)
         self.data["args"] = {"task_id": task_id, "solution": solution}
 
-
     
 class P2PProtocol:
     """P2P Protocol."""
-    
+        
     @classmethod
-    def flooding_hello(cls, replyAddress: str, nodesList: list, baseValue: int = 0, incrementedValue: int = 0) -> FloodingHelloMessage:
+    def flooding_hello(cls, replyAddress: str, aliveNodes: list, pending_stats: dict) -> FloodingHelloMessage:
         """Creates a SolveRequestMessage object."""
-        return FloodingHelloMessage(replyAddress, nodesList, baseValue, incrementedValue)
+        return FloodingHelloMessage(replyAddress, aliveNodes, pending_stats)
 
     @classmethod
-    def flooding_confirmation(cls, replyAddress: str, solved: int, invalid: int, nodes: str ) -> FloodingConfirmationMessage:
+    def flooding_confirmation(cls, replyAddress: str, stats: dict ) -> FloodingConfirmationMessage:
         """Creates a FloodingConfirmationMessage object."""
-        return FloodingConfirmationMessage(replyAddress, solved, invalid, nodes)
+        return FloodingConfirmationMessage(replyAddress, stats)
 
     @classmethod
     def join_request(cls, replyAddress: str) -> JoinRequestMessage:
@@ -78,9 +92,9 @@ class P2PProtocol:
         return JoinRequestMessage(replyAddress)
 
     @classmethod
-    def join_reply(cls, nodesList: list) -> JoinReplyMessage:
+    def join_reply(cls, aliveNodes: list) -> JoinReplyMessage:
         """Creates a JoinReplyMessage object."""
-        return JoinReplyMessage(nodesList)
+        return JoinReplyMessage(aliveNodes)
 
     @classmethod
     def solve_request(cls, replyAddress: str, task_id: TaskID, sudoku: str) -> SolveRequestMessage:
@@ -125,13 +139,13 @@ class P2PProtocol:
         command = data.get("command") 
 
         if command == "FLOODING_HELLO":
-            return FloodingHelloMessage(data["replyAddress"], data["args"]["nodesList"], data["baseValue"], data["incrementedValue"])
+            return FloodingHelloMessage(data["replyAddress"], data["args"]["aliveNodes"], data["args"]["stats"])
         elif command == "FLOODING_CONFIRMATION":
-            return FloodingConfirmationMessage(data["replyAddress"], data["args"]["all"]["solved"], data["args"]["all"]["invalid"], data["args"]["nodes"])    
+            return FloodingConfirmationMessage(data["replyAddress"], data["args"]["stats"])    
         elif command == "JOIN_REQUEST":
             return JoinRequestMessage(data["replyAddress"])
         elif command == "JOIN_REPLY":
-            return JoinReplyMessage(data["args"]["nodesList"])
+            return JoinReplyMessage(data["args"]["aliveNodes"])
         elif command == "SOLVE_REQUEST":
             return SolveRequestMessage(data["replyAddress"], data["args"]["task_id"], data["args"]["sudoku"])
         elif command == "SOLVE_REPLY":

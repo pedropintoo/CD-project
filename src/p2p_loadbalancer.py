@@ -5,6 +5,7 @@ from socket import socket
 class Worker:
     def __init__(self, host_port: str, socket: socket, smoothing_factor: float = 0.50):
         self.worker_address = host_port
+        self.network = {}
         self.socket = socket
 
         # availability

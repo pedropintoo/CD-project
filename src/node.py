@@ -14,20 +14,30 @@ class Node:
         self.selector = selectors.DefaultSelector()
         self.anchor = anchor # uniform format 'host:port'
 
-        self.stats = {"all" : {"solved": 0, "invalid": 0}, "nodes": []} # where "nodes": {"address": xx, "validations": xx}
+        self.stats = {
+            "all" : 
+            {
+                "solved": 0, 
+                "invalid": 0, 
+                "validations": 0 # sum of nodes validations
+            }, 
+            "nodes": [
+                # { "address": "host:port", "validations": 0}, ..
+            ]
+        } 
         
-        self.stats = {"baseValue": 0}
-        self.flooding_round = 0
-        self.incrementedValue = 0
-        self.pending_stats = {  "numberOfResults": 0,
-                                "all": {
-                                    "solved": 0, "internal_solved": 0, "external_solved": 0,
-                                    "invalid": 0, "internal_invalid": 0, "external_invalid": 0,
-                                },
-                                "nodes": []    
-                            }
+        self.pending_stats = {  
+            "numberOfResults": 0,
+            "all": {
+                "solved": 0, "internal_solved": 0, "external_solved": 0, "uncommitted_solved": 0,
+                "invalid": 0, "internal_invalid": 0, "external_invalid": 0, "uncommitted_invalid": 0, 
+                "validations": 0, "internal_validations": 0, "external_validations": 0, "uncommitted_validations": 0 # TODO: remove validations and use sum of nodes validations
+            },
+            "nodes": [
+                # { "address": "host:port", "validations": 0, "internal_validations": 0, "external_validations": 0, "uncommitted_validations": 0}, ..
+            ]    
+        }
 
-        self.pending_stats = {"baseValue": 0, "incrementedValue": 0, "totalIncrementedValue": 0, "numberOfResults": 0}        
         
         self.network = {}
         
@@ -36,7 +46,7 @@ class Node:
         self.handicap = handicap
 
         self.last_flooding = time.time()
-        self.TIME_TO_FLOODING = 2 # in seconds
+        self.TIME_TO_FLOODING = 3 # in seconds
 
         self.http_server = HTTPServer(self.logger, host, http_port, self.stats, self.network, max_threads)
         self.p2p_server = P2PServer(self.logger, host, p2p_port)
@@ -90,9 +100,61 @@ class Node:
         """Check if it is time to send a flooding message."""
         return (time.time() - self.last_flooding) > self.TIME_TO_FLOODING
 
-    def updateStats(self, firstCell, secondCell):
+    def updateSumStats(self, baseName=None, updateNodes=False):
         """Update Stats."""
-        self.stats[firstCell][secondCell] = self.stats[firstCell][secondCell] + self.stats[firstCell]["internal_"+secondCell] + self.stats[firstCell]["external_"+secondCell]
+        self.stats["all"][baseName] = self.pending_stats["all"][baseName] + self.pending_stats["all"]["internal_"+baseName] + self.pending_stats["all"]["external_"+baseName]
+        # TODO: nodes stats
+
+    def commitPendingStats(self, baseName=None, commitNodes=False):
+        """Commit Pending Stats."""
+        # stat = self.pending_stats["all"][baseName] ???
+        self.pending_stats["all"][baseName] = self.pending_stats["all"]["uncommitted_"+baseName]
+        self.pending_stats["all"]["uncommitted_"+baseName] = 0
+        # TODO: nodes stats
+
+    def updateWithReceivedStats(self, stats, baseName=None, updateNodes=False):
+        """Update Stats with Received Stats."""
+        baseValueReceived = stats["all"][baseName]
+        incrementedValueReceived = stats["all"]["internal_"+baseName]
+        myPendingBaseValue = self.stats["all"][baseName]
+        self.logger.debug(f"Update {baseName} to [{baseValueReceived}].")
+        if baseValueReceived > myPendingBaseValue:
+            self.pending_stats["all"][baseName] = baseValueReceived
+            self.pending_stats["all"]["internal_"+baseName] = 0
+            self.pending_stats["all"]["external_"+baseName] = 0
+            self.pending_stats["all"]["uncommitted_"+baseName] = 0
+            self.pending_stats["numberOfResults"] = 0
+        elif baseValueReceived < myPendingBaseValue:
+            self.pending_stats["numberOfResults"] += 1
+        else:
+            self.pending_stats["numberOfResults"] += 1
+            self.pending_stats["all"]["external_"+baseName] += incrementedValueReceived 
+        
+        # TODO: nodes stats
+
+    def updateWithConfirmedStats(self, stats, host_port, baseName=None, updateNodes=False):
+        """Update Stats with Confirmed Stats."""
+        baseValueReceived = stats["all"][baseName]
+        myBaseValue = self.stats["all"][baseName]
+
+        if baseValueReceived > myBaseValue:
+            self.stats["all"][baseName] = baseValueReceived
+            self.logger.critical(f"Update {baseName} to [{self.stats['all'][baseName]}].")
+        elif baseValueReceived < myBaseValue:
+            self.logger.critical(f"Discard {baseName} [{baseValueReceived}] from {host_port}.")
+
+        self.pending_stats["all"][baseName] = self.stats["all"][baseName]
+        self.pending_stats["all"]["internal_"+baseName] = 0
+        self.pending_stats["all"]["external_"+baseName] = 0
+        # not the uncommitted !!!
+        self.pending_stats["all"]["numberOfResults"] = 0
+        # TODO: nodes stats
+
+    def updateNetwork(self):
+        """Update network dict."""
+        self.network.clear()
+        for worker in self.wtManager.get_alive_workers():
+            self.network[worker.worker_address] = worker.network
 
     def run(self):
         """Run the node."""
@@ -113,17 +175,19 @@ class Node:
 
 ######### Main loop
         while True:
-            # TODO: flooding protocol
             if self.isToSendFlooding():
-                self.pending_stats["incrementedValue"] = self.incrementedValue
+                # commit the pending stats and define uncommitted as 0
+                self.commitPendingStats("solved") 
+                self.commitPendingStats("invalid")
+                self.commitPendingStats("validations")
                 
                 for worker in self.wtManager.get_alive_workers():
-                    self.logger.debug(f"P2P: Sending flooding consensus to {worker.worker_address} [{self.pending_stats['baseValue']}, {self.pending_stats['incrementedValue']}]")
-                    msg = P2PProtocol.flooding_hello(self.p2p_server.replyAddress, list(self.wtManager.get_alive_workers_address()), self.pending_stats["baseValue"], self.pending_stats["incrementedValue"])
+                    self.logger.debug(f"P2P: Sending flooding consensus to {worker.worker_address}.")
+                    msg = P2PProtocol.flooding_hello(self.p2p_server.replyAddress, list(self.wtManager.get_alive_workers_address()), self.pending_stats)
                     self.send_msg(worker, msg)
                 self.last_flooding = time.time()
 
-                self.incrementedValue = 0
+                self.updateNetwork()
 
             self.wtManager.checkWorkersFloodingTimeouts() # kill inactive workers (if any)   
 
@@ -161,18 +225,22 @@ class Node:
                 if data["command"] == "FLOODING_HELLO":
                     #### update the network
                     host_port = data["replyAddress"]
+                    aliveNodes = data["args"]["aliveNodes"]
 
                     worker = self.wtManager.workersDict.get(host_port)
                     # Add or update the node that sent the flooding message
                     if worker is None:
-                        self.connectWorker(host_port)
+                        worker = self.connectWorker(host_port)
                     else:
                         if worker.socket == None:
                             # worker was dead and socket must be reconnected
                             self.connectWorker(host_port)
+                        worker.flooding_received() # update the last flooding time
+
+                    worker.network = aliveNodes # update worker network
 
                     # Add nodes that current node does not have
-                    for host_port in data["args"]["nodesList"]:
+                    for host_port in aliveNodes:
                         # Skip if the node is the same as the current node
                         if host_port == self.p2p_server.replyAddress:
                             continue
@@ -181,39 +249,26 @@ class Node:
                             self.connectWorker(host_port)        
 
                     #### updating the stats
-                    baseValueReceived = data["baseValue"]
-                    incrementedValueReceived = data["incrementedValue"]
-                                        
-                    if baseValueReceived > self.pending_stats["baseValue"]:
-                        self.pending_stats["baseValue"] = baseValueReceived
-                        self.pending_stats["incrementedValue"] = 0
-                        self.pending_stats["totalIncrementedValue"] = 0
-                        self.pending_stats["numberOfResults"] = 0 # i cannot send the confirmation!!
-                        self.incrementedValue = 0
-                    elif baseValueReceived < self.pending_stats["baseValue"]:
-                        self.pending_stats["numberOfResults"] += 1
-                    else:                        
-                        self.pending_stats["numberOfResults"] += 1
-                        self.pending_stats["totalIncrementedValue"] += incrementedValueReceived  
+                    stats = data["args"]["stats"]
 
-                    worker = self.wtManager.workersDict.get(data["replyAddress"])
-                    worker.flooding_received() # update the last flooding time
-                    
-                    self.logger.warning(f"[{self.pending_stats['baseValue']}, {self.incrementedValue}, {self.pending_stats['totalIncrementedValue'] }]")
+                    self.updateWithReceivedStats(stats, baseName="solved")
+                    self.updateWithReceivedStats(stats, baseName="invalid")
+                    self.updateWithReceivedStats(stats, baseName="validations")
+
+                    self.logger.warning(f"[{self.pending_stats['all']['solved']}, {self.pending_stats['all']['uncommitted_solved']}, {self.pending_stats['all']['external_solved'] }]")
 
                 elif data["command"] == "FLOODING_CONFIRMATION":
                     # update baseValue if someone has a higher value (or higher round)
-                    baseValueReceived = data["baseValue"]
+                    host_port = data["replyAddress"]
+                    stats = data["args"]["stats"]
+                   
                     
-                    if baseValueReceived > self.pending_stats["baseValue"]:
-                        self.stats["baseValue"] = baseValueReceived
-                        self.logger.critical(f"Update baseValue to [{self.stats['baseValue']}].")
-                    elif baseValueReceived < self.pending_stats["baseValue"]:
-                        self.logger.critical(f"Discard baseValue [{baseValueReceived}] from {data['replyAddress']}.")
-                    else:
-                        self.logger.critical(f"Confirmed baseValue to {self.stats['baseValue']}.")
+                    # host_port is only for logging!
+                    self.updateWithConfirmedStats(stats, host_port, "solved")
+                    self.updateWithConfirmedStats(stats, host_port, "invalid")
+                    self.updateWithConfirmedStats(stats, host_port, "validations")
+
                     
-                    self.pending_stats = {"baseValue": self.stats["baseValue"], "incrementedValue": 0, "totalIncrementedValue": 0, "numberOfResults": 0} 
 
                 elif data["command"] == "JOIN_REQUEST":
                     host_port = data["replyAddress"]
@@ -222,28 +277,26 @@ class Node:
                     worker.flooding_received() # if the worker is not new it is a reconnection!
 
                     # reply with the list of nodes
-                    msg = P2PProtocol.join_reply(nodesList=list(self.wtManager.get_alive_workers_address()))
+                    msg = P2PProtocol.join_reply(aliveNodes=list(self.wtManager.get_alive_workers_address()))
                     self.send_msg(worker, msg)
 
                 elif data["command"] == "JOIN_REPLY":
-                    nodesList = data["args"]["nodesList"].copy() # list of nodes to send in next flooding
-                    nodesList.remove(self.p2p_server.replyAddress) # himself b# TODO: ELE NUMA SEGUNDA RECONECAO PODE ESTAR MORTO E NAO APARECE AQU!
-                    nodesList.append(self.anchor) # how send the join reply
+                    aliveNodes = data["args"]["aliveNodes"].copy() # list of nodes to send in next flooding
+                    aliveNodes.remove(self.p2p_server.replyAddress) # himself
+                    aliveNodes.append(self.anchor) # how send the join reply
 
                     # Send flooding hello message for each node
-                    for host_port in nodesList:
+                    for host_port in aliveNodes:
 
                         if host_port == self.anchor:
                             worker = self.wtManager.workersDict.get(host_port) # already connected
                         else:
                             worker = self.connectWorker(host_port)
 
-                        msg = P2PProtocol.flooding_hello(self.p2p_server.replyAddress, nodesList)
+                        msg = P2PProtocol.flooding_hello(self.p2p_server.replyAddress, aliveNodes, self.pending_stats)
                         self.send_msg(worker, msg)
 
-                elif data["command"] == "SOLVE_REQUEST":
-                    # TODO: create an object SudokuJob from sudoku_job.py and receive the boolean result from him 
-                    
+                elif data["command"] == "SOLVE_REQUEST":                    
                     task_id = data["args"]["task_id"]
                     sudoku = data["args"]["sudoku"]
                     host_port = data["replyAddress"]
@@ -254,7 +307,7 @@ class Node:
                     # Create SudokuJob object
                     sudoku_job = SudokuJob(sudoku, start, end, self.solverConfig)
                     
-                    # Execute the task using SudokuJob (TODO: thread this)
+                    # Execute the task using SudokuJob (TODO: maybe thread this)
                     solution = sudoku_job.run()
 
                     worker = self.wtManager.workersDict.get(host_port)
@@ -276,17 +329,18 @@ class Node:
                                             
                     self.wtManager.finish_task(task_id, solution) 
 
-                    # validations = task_id.end - task_id.start
+                    validations = task_id.end - task_id.start
                     # # update flooding stats
-                    # self.incrementedValue += validations
-                    self.logger.critical(f"Increment validations {solution} by [{task_id}].")
+                    self.pending_stats["all"]["uncommitted_validations"] += validations
+                    self.logger.critical(f"Increment validations.")
 
 
             # I will send the confirmation only when I receive the result from all ALIVE nodes 
             if len(self.wtManager.get_alive_workers()) > 0 and self.pending_stats["numberOfResults"] >= len(self.wtManager.get_alive_workers()):
-                updateStats("all","solved")
-                updateStats("all","invalid")
-                # self.stats["baseValue"] = self.pending_stats["baseValue"] + self.pending_stats["totalIncrementedValue"] + self.pending_stats["incrementedValue"]
+                # update the stats with the pending stats
+                self.updateSumStats("solved")
+                self.updateSumStats("invalid")
+                self.updateSumStats("validations")                 
                 
                 # broadcast the confirmation
                 for worker in self.wtManager.get_alive_workers():
@@ -294,17 +348,17 @@ class Node:
                     self.send_msg(worker, msg)
                 
                 # setup for the next round
-                self.pending_stats = {  "numberOfResults": 0,
-                                "all": {
-                                    "solved": self.stats["all"]["solved"], "internal_solved": 0, "external_solved": 0,
-                                    "invalid": self.stats["all"]["invalid"], "internal_invalid": 0, "external_invalid": 0,
-                                },
-                                "nodes": []    
-                            }
-                # self.pending_stats = {"baseValue": self.stats["baseValue"], "incrementedValue": 0, "totalIncrementedValue": 0, "numberOfResults": 0}
-                
-                # self.flooding_round += 1
-            
+                self.pending_stats = {  
+                    "numberOfResults": 0,
+                    "all": {
+                        "solved": self.stats["all"]["solved"], "internal_solved": 0, "external_solved": 0, "uncommitted_solved": self.pending_stats["all"]["uncommitted_solved"],
+                        "invalid": self.stats["all"]["invalid"], "internal_invalid": 0, "external_invalid": 0, "uncommitted_invalid": self.pending_stats["all"]["uncommitted_invalid"],
+                        "validations": self.stats["all"]["validations"], "internal_validations": 0, "external_validations": 0, "uncommitted_validations": self.pending_stats["all"]["uncommitted_validations"] # TODO: remove validations and use sum of nodes validations
+                    },
+                    "nodes": [
+                        # { "address": "host:port", "validations": 0, "internal_validations": 0, "external_validations": 0, "uncommitted_validations": 0}, ..
+                    ]
+                }            
 
             if not self.isHandlingHTTP:
                 continue
@@ -319,11 +373,11 @@ class Node:
                     solution = self.wtManager.solutionsDict.popitem()[1] # the first element is the sudoku_id solved!
                     self.logger.info(f"HTTP: Task done! {solution}")
                     self.http_server.response_queue.put(solution)
-                    self.pending_stats["all"]["internal_solved"] += 1
+                    self.pending_stats["all"]["uncommitted_solved"] += 1
                 else:    
                     self.http_server.response_queue.put(None)
                     self.logger.debug("HTTP: Task done! [No solution]")
-                    self.pending_stats["all"]["internal_invalid"] += 1
+                    self.pending_stats["all"]["uncommitted_invalid"] += 1
             else:
             # manage tasks assignments and timeouts
                 retry_tasks = self.wtManager.checkTasksTimeouts() # tasks to retry, the timeout ones were all in the pending queue!

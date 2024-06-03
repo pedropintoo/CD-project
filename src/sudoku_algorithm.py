@@ -40,7 +40,7 @@ class SudokuAlgorithm:
             self.recent_requests = deque([t for t in self.recent_requests if current_time - t < self.interval])
         else:
             self.recent_requests = deque()
-        self.logger.info(f"Recent requests: {len(self.recent_requests)}")
+        # self.logger.info(f"Recent requests: {len(self.recent_requests)}")
         self.grid = sudoku
         return self.check()
 
