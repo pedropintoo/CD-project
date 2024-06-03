@@ -13,3 +13,6 @@ curl http://localhost:8000/solve -X POST -H 'Content-Type: application/json' -d 
 
 
 curl http://localhost:8000/solve -X POST -H 'Content-Type: application/json' -d '{"sudoku": [[6, 7, 9, 4, 3, 0, 8, 1, 5], [3, 5, 8, 9, 1, 7, 2, 6, 4], [4, 2, 1, 5, 8, 6, 7, 9, 3], [9, 4, 3, 6, 0, 1, 5, 2, 8], [5, 1, 2, 8, 9, 0, 3, 7, 6], [8, 6, 7, 2, 5, 3, 1, 4, 9], [7, 9, 6, 3, 2, 5, 4, 8, 0], [2, 8, 5, 0, 4, 9, 6, 3, 7], [1, 3, 4, 7, 6, 8, 9, 5, 2]] }'
+
+# Sudoku mais simples
+curl http://localhost:8000/solve -X POST -H 'Content-Type: application/json' -d '{"sudoku": [[6, 7, 9, 4, 3, 2, 8, 1, 5], [3, 5, 8, 9, 1, 7, 2, 6, 4], [4, 2, 1, 5, 8, 6, 7, 9, 3], [9, 4, 3, 6, 7, 1, 5, 2, 8], [5, 1, 2, 8, 9, 0, 3, 7, 6], [8, 6, 7, 2, 5, 3, 1, 4, 9], [7, 9, 6, 3, 2, 5, 4, 8, 0], [2, 8, 5, 1, 4, 9, 6, 3, 7], [1, 3, 4, 7, 6, 8, 9, 5, 2]] }'
