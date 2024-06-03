@@ -25,7 +25,7 @@ class SudokuJob:
                             fill_comb = fill_comb // 10
 
                     # 2. Check if the sudoku is valid. If yes, raise Found             
-                    if SudokuAlgorithm.checkWith(sudoku, self.solverConfig):
+                    if self.solverConfig.checkWithParams(sudoku):
                         self.solution = sudoku
                         raise Found
         except Found: pass

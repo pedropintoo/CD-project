@@ -35,23 +35,7 @@ class Node:
         # Workers & Tasks Manager (load balancer)
         self.wtManager = WTManager(self.logger)
         
-        self.solverConfig = self.initialize_solver_config()
-    
-    def initialize_solver_config(self):
-        # Instantiate a SudokuAlgorithm object
-        algorithm = SudokuAlgorithm()
-        
-        if self.handicap == 0:
-            # Return the SudokuAlgorithm object with the default parameters
-            return algorithm
-        
-        # Calculate the parameters for the algorithm
-        base_delay, interval, threshold = algorithm.calculate_delay_params(self.handicap)
-        
-        self.logger.error(f"Base delay: {base_delay}, Interval: {interval}, Threshold: {threshold}, Handicap: {self.handicap}")
-        # Return the SudokuAlgorithm object with the calculated parameters
-        return SudokuAlgorithm(base_delay, interval, threshold)  
-
+        self.solverConfig = SudokuAlgorithm(logger= self.logger)
 
     def connectWorker(self, host_port) -> Worker:
         """Connect to a peer."""

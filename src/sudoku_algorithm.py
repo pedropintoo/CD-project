@@ -3,17 +3,17 @@ from collections import deque
 from src.utils.logger import Logger
 
 class SudokuAlgorithm:
-    def __init__(self, sudoku = None, base_delay=0.01, interval=10, threshold=5):
+    def __init__(self, sudoku = None, logger = Logger, handicap = 0):
         self.grid = sudoku
-        self.recent_requests = deque()
-        self.base_delay = base_delay # delay apllied when the number of requests exceeds the threshold
-        self.interval = interval # interval to check if the number of requests exceeds the threshold
-        self.threshold = threshold # maximum number of requests allowed in the interval
+        self.logger = logger
 
-    @classmethod
-    def checkWith(clc, sudoku, solverConfig):
-        solver = SudokuAlgorithm(sudoku, solverConfig.base_delay, solverConfig.interval, solverConfig.threshold)
-        return solver.check(solverConfig.base_delay, solverConfig.interval, solverConfig.threshold)
+        self.recent_requests = deque()
+        self.handicap = handicap       # total handicap
+
+        # calculated in runtime
+        self.base_delay = 0  # delay applied when the number of requests exceeds the threshold
+        self.interval = 0      # interval to check if the number of requests exceeds the threshold
+        self.threshold = 0      # maximum number of requests allowed in the interval
 
     def __str__(self):
         string_representation = "| - - - - - - - - - - - |\n"
@@ -34,13 +34,21 @@ class SudokuAlgorithm:
 
         return string_representation
 
-    def calculate_delay_params(self, handicap_ms):
+    def checkWithParams(self, sudoku: str):
+        # if self.handicap > 0:
+        #     self.calculate_delay_params()
+        #     self.logger.critical(f"Handicap: {self.handicap}, Base delay: {self.base_delay}, Interval: {self.interval}, Threshold: {self.threshold}")
+        self.grid = sudoku
+        # self.logger.warning(f"Parameters: {self.base_delay}, {self.interval}, {self.threshold}")
+        # self.logger.warning("Len requests: " + str(len(self.recent_requests)))
+        self.recent_requests = deque()
+        return self.check()
+
+    def calculate_delay_params(self):
         # Define arbitrary proportions for interval and threshold
-        interval = 10  # interval to check if the number of requests exceeds the threshold
-        threshold = 5  # limit of allowed calls
 
         # Convert handicap from milliseconds to seconds
-        handicap_seconds = handicap_ms / 1000.0
+        handicap_seconds = self.handicap / 1000.0
 
         # Calculate base_delay: total handicap divided by the number of calls exceeding the threshold
         # Ensure we only apply base_delay if num_requests exceeds threshold
@@ -50,19 +58,14 @@ class SudokuAlgorithm:
         
         # number of requests made in the last interval
         num_requests = len(
-            [t for t in self.recent_requests if current_time - t < interval]
+            [t for t in self.recent_requests if current_time - t < self.interval]
         )
         
         # If the number of requests exceeds the threshold, the delay increases
-        if num_requests > threshold:
-            base_delay = handicap_seconds / (num_requests - threshold) # the delay is applied proportionally based on the excess number of requests.
-        else:
-            base_delay = 0.01
-            interval = 10
-            threshold = 5
-
-        return base_delay, interval, threshold
+        if num_requests > self.threshold:
+            self.base_delay = handicap_seconds / (num_requests - self.threshold) # the delay is applied proportionally based on the excess number of requests.
     
+
     
     def _limit_calls(self, base_delay=0.01, interval=10, threshold=5):
         """Limit the number of requests made to the Sudoku object."""
@@ -84,6 +87,7 @@ class SudokuAlgorithm:
         # If the number of requests exceeds the threshold, the delay increases linearly
         if num_requests > threshold:
             delay = base_delay * (num_requests - threshold + 1)
+            # self.logger.warning(f"Delay: {delay}")
             time.sleep(delay)
 
     def check_row(self, row, base_delay=None, interval=None, threshold=None):
