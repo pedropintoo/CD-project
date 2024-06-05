@@ -9,10 +9,8 @@ class Worker:
         self.socket = socket
 
         # stats
-        self.validations = 0
-        self.internal_validations = 0
-        self.external_validations = 0
-        self.uncommitted_validations = 0
+        self.stats = {"address": host_port, "validations": 0}
+        self.pending_stats = {"address": host_port, "validations": 0, "internal_validations": 0, "external_validations": 0, "uncommitted_validations": 0}
 
         # availability
         self.Alive = True       # false when worker is dead ( it means that the worker is not responding or socket was closed )

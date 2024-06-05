@@ -101,18 +101,35 @@ class Node:
 
     def updateSumStats(self, baseName=None, updateNodes=False):
         """Update Stats."""
+        if updateNodes:
+            for worker in self.wtManager.workersDict.values():
+                worker.stats["validations"] = worker.pending_stats["validations"] + worker.pending_stats["internal_validations"] + worker.pending_stats["external_validations"]
+            # TODO: herself stats
+            return
+
         self.stats["all"][baseName] = self.pending_stats["all"][baseName] + self.pending_stats["all"]["internal_"+baseName] + self.pending_stats["all"]["external_"+baseName]
-        # TODO: nodes stats
 
     def commitPendingStats(self, baseName=None, commitNodes=False):
         """Commit Pending Stats."""
         # stat = self.pending_stats["all"][baseName] ???
+        if commitNodes:
+            for worker in self.wtManager.workersDict.values():
+                worker.pending_stats["internal_validations"] = worker.pending_stats["uncommitted_validations"]
+                worker.pending_stats["uncommitted_validations"] = 0
+            return;    
+            # TODO: herself stats
+
         self.pending_stats["all"]["internal_"+baseName] = self.pending_stats["all"]["uncommitted_"+baseName]
         self.pending_stats["all"]["uncommitted_"+baseName] = 0
-        # TODO: nodes stats
 
     def updateWithReceivedStats(self, stats, baseName=None, updateNodes=False):
         """Update Stats with Received Stats."""
+        if updateNodes:
+            for stat in stats["nodes"]:
+                host_port = stat["address"]
+                # TODO: ...
+        
+        
         myBaseValue = self.pending_stats["all"][baseName] # from pending stats
         baseValueReceived = stats["all"][baseName]
         incrementedValueReceived = stats["all"]["internal_"+baseName]
@@ -156,10 +173,12 @@ class Node:
 
     def updateWorkersStats(self):
         """Update workers stats."""
+        self.stats["nodes"].clear()
         for worker in self.wtManager.workersDict.values():
-            self.logger.debug(f"{worker.worker_address} -> {worker.validations}")
-            # Now we need to extend the logic to clients validations
-        # TODO: extend to herself !! when the dispatcher node makes checks.    
+            self.stats["nodes"].append(worker.stats)
+        
+        # Now we need to extend the logic to clients validations
+        # # TODO: extend to herself !! when the dispatcher node makes checks.    
 
     def run(self):
         """Run the node."""
@@ -192,6 +211,7 @@ class Node:
                 self.commitPendingStats("solved") 
                 self.commitPendingStats("invalid")
                 self.commitPendingStats("validations")
+                self.commitPendingStats(commitNodes=True)
                 
                 for worker in self.wtManager.get_alive_workers():
                     self.logger.debug(f"P2P: Sending flooding consensus to {worker.worker_address}.")
@@ -199,8 +219,8 @@ class Node:
                     self.send_msg(worker, msg)
                 self.last_flooding = time.time()
 
-                self.updateNetwork()
                 self.updateWorkersStats()
+                self.updateNodesStats()
 
             self.wtManager.checkWorkersFloodingTimeouts() # kill inactive workers (if any)   
 
