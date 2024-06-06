@@ -51,6 +51,9 @@ class Worker:
         self.task_response_time = (self.smoothing_factor * elapsed_time +
                                     (1 - self.smoothing_factor) * self.task_response_time)
         
+        # limit task_response_time to 0.5 with task_size
+        self.task_size = int(self.task_size * (0.75 / self.task_response_time))
+
 
     def isFloodingTimeout(self):
         if self.Alive == False:
@@ -168,7 +171,7 @@ class WTManager:
     def get_task_to_worker(self, worker: Worker) -> Task:
         """Get the task to assign to a worker."""
         task_size = worker.task_size
-
+        
         if len(self.pending_tasks_queue) > 0:
             task_id = self.pending_tasks_queue[0]
             if task_id.end - task_id.start <= task_size:
@@ -177,7 +180,7 @@ class WTManager:
                 return Task(task_id, worker) 
             else:
                 new_task_id = TaskID(task_id.sudoku_id, task_id.start, task_id.start + task_size)
-                task_id.start += task_size # update the abandoned task
+                task_id._replace(start=task_id.start+task_size) # update the abandoned task
                 return Task(new_task_id, worker)
 
         task_id = self.current_sudoku.get_splitted_task_id(task_size)

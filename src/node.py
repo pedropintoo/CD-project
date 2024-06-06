@@ -465,7 +465,7 @@ class Node:
 
                     # send the tasks to the worker
                     self.send_msg(task.worker, msg)
-                    self.logger.debug(f"P2P: Assigning task {task.task_id} to {task.worker.worker_address} [{task.worker.task_response_time}]")
+                    self.logger.debug(f"P2P: Assigning task {task.task_id} to {task.worker.worker_address} [{task.worker.task_response_time}-{task.worker.task_size}]")
 
 
                     
