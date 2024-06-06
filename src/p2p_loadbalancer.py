@@ -3,7 +3,7 @@ from typing import Dict, List, Tuple, NamedTuple, Deque
 from socket import socket
 
 class Worker:
-    def __init__(self, host_port: str, socket: socket, smoothing_factor: float = 0.50):
+    def __init__(self, host_port: str, socket: socket, smoothing_factor: float = 0.50, task_size_factor: float = 0.75):
         self.worker_address = host_port
         self.network = {}
         self.socket = socket
@@ -27,7 +27,8 @@ class Worker:
         self.smoothing_factor = smoothing_factor # TODO: increase when worker gets older (more stable)
 
         # worker task size
-        self.task_size = 1000 # TODO: changed in run time !!
+        self.task_size = 1000
+        self.task_size_factor = task_size_factor
 
     def start_task(self):
         """Worker start a task."""
@@ -51,9 +52,9 @@ class Worker:
         self.task_response_time = (self.smoothing_factor * elapsed_time +
                                     (1 - self.smoothing_factor) * self.task_response_time)
         
-        # limit task_response_time to 0.5 with task_size
-        self.task_size = int(self.task_size * (0.75 / self.task_response_time))
-
+        # limit task_response_time to task_size_factor with task_size
+        self.task_size = int(self.task_size * (self.task_size_factor / self.task_response_time))
+        # print(f"TASK : {self.task_size}, {self.task_size_factor} {self.task_response_time}")
 
     def isFloodingTimeout(self):
         if self.Alive == False:
@@ -202,8 +203,10 @@ class WTManager:
     def finish_task(self, task_id: TaskID, solution: str = None):
         """Remove a task from the working list."""
         task = self.working_tasks.get(task_id)
+        self.logger.info("HEAR")
         if task is not None:
             task.worker.task_done()
+            self.logger.critical(task.worker.task_response_time)
             del self.working_tasks[task_id]
         else:
             try:
@@ -238,6 +241,10 @@ class WTManager:
     def has_working_tasks(self) -> bool:
         """Check if there are working tasks."""
         return len(self.working_tasks) > 0
+
+    def has_tasks(self) -> bool:
+        """Check if there are tasks available."""
+        return (self.has_pending_tasks() or self.current_sudoku.has_tasks())
 
     def kill_worker(self, host_port: str, close_socket = True):
         """Kill a worker."""
@@ -312,7 +319,7 @@ class WTManager:
 
         worker = self.get_best_worker() # if None: no workers available
         
-        while (self.has_pending_tasks() or self.current_sudoku.has_tasks()) and worker is not None:
+        while self.has_tasks() and worker is not None:
             task = self.get_task_to_worker(worker) # from pending tasks or sudoku queue (splitted task)
             task_id = task.task_id
 

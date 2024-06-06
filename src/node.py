@@ -49,10 +49,12 @@ class Node:
         # Workers & Tasks Manager (load balancer)
         self.wtManager = WTManager(self.logger)
         self.myWork = self.wtManager.add_worker(self.p2p_server.replyAddress, socket=None) # add itself as a worker
-        self.myWork.Alive = False # it is not alive, it is the node itself!
-        
+        self.myWork.Alive = False           # it is not alive, it is the node itself!
+        self.myWork.task_size_factor = 0.05  #
+        self.myWork.smoothing_factor = 0.9 # TODO: !!!
+        self.myWork.task_done()
+        self.first = 0
         self.solverConfig = SudokuAlgorithm(logger= self.logger, handicap = self.handicap)
-
     
 
     def connectWorker(self, host_port) -> Worker:
@@ -223,6 +225,43 @@ class Node:
         self.stats["all"]["validations"] = total_validations
         # TODO: herself stats
 
+    def doTasksInDispatcher(self):
+        """Do tasks in dispatcher."""
+        if self.first == 10:
+            return
+        
+        task_size_factor = self.p2p_server.update_average_request()
+        if task_size_factor > self.TIME_TO_FLOODING/2:
+            task_size_factor = self.TIME_TO_FLOODING/2
+
+        self.logger.critical(self.myWork.task_size)  
+        # self.first += 1
+        # self.myWork.task_size += 1
+        self.myWork.task_size = int(self.myWork.task_size * (task_size_factor / self.myWork.task_response_time))
+
+        if self.p2p_server.request_queue.empty and self.wtManager.has_tasks():
+            task = self.wtManager.get_task_to_worker(self.myWork)
+            task_id = task.task_id
+
+            self.wtManager.working_tasks[task_id] = task # only for updates
+
+            # Create SudokuJob object
+            sudoku_job = SudokuJob(self.wtManager.current_sudoku.sudoku, task_id.start, task_id.end, self.solverConfig)
+            
+            # Execute the task using SudokuJob
+            solution = sudoku_job.run()
+
+            if solution is not None:
+                self.logger.debug(f"Sudoku is valid. [by Dispatcher]")
+
+            self.wtManager.finish_task(task_id, solution) 
+
+            validations = task_id.end - task_id.start # update flooding stats
+            self.myWork.pending_stats["uncommitted_validations"] += validations
+
+            self.logger.debug(f"Dispatcher is working in free time... {task_id} [{self.myWork.task_response_time},{self.myWork.task_size}]")
+
+
     def run(self):
         """Run the node."""
         self.http_server.start()
@@ -264,6 +303,7 @@ class Node:
                 http_request = self.http_server.request_queue.get(block=False)
                 if http_request is not None: 
                     self.logger.debug(f"HTTP: Requested {http_request} tasks.")
+                    # self.myWork.task_response_time = 0.1 # TODO: check this
             except queue.Empty:
                 http_request = None
 
@@ -368,7 +408,7 @@ class Node:
                     # Create SudokuJob object
                     sudoku_job = SudokuJob(sudoku, start, end, self.solverConfig)
                     
-                    # Execute the task using SudokuJob (TODO: maybe thread this)
+                    # Execute the task using SudokuJob
                     solution = sudoku_job.run()
 
                     worker = self.wtManager.workersDict.get(host_port)
@@ -423,6 +463,7 @@ class Node:
                         "validations": worker.stats["validations"], "internal_validations": 0, "external_validations": 0, "uncommitted_validations": worker.pending_stats["uncommitted_validations"]
                     }       
 
+
             if not self.isHandlingHTTP:
                 continue
             
@@ -465,7 +506,8 @@ class Node:
 
                     # send the tasks to the worker
                     self.send_msg(task.worker, msg)
-                    self.logger.debug(f"P2P: Assigning task {task.task_id} to {task.worker.worker_address} [{task.worker.task_response_time}-{task.worker.task_size}]")
+                    self.logger.debug(f"P2P: Assigning task {task.task_id} to {task.worker.worker_address} [{task.worker.task_response_time},{task.worker.task_size}]")
 
 
-                    
+                # Do some tasks (if any)
+                self.doTasksInDispatcher()

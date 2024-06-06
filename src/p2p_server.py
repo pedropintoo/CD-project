@@ -1,5 +1,6 @@
 import socket
 import selectors
+import time
 from threading import Thread
 from queue import Queue
 from src.p2p_protocol import P2PProtocol
@@ -14,12 +15,19 @@ class P2PServer(Thread):
         self.request_queue = Queue()
 
         self.selector = selectors.DefaultSelector()
+
+        self.last_request = time.time()
+        self.average_request = 0
         
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._socket.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1) # Reuse address
         self._socket.bind((host, port))
         self._socket.listen(100)
         self._socket.setblocking(False)
+
+    def update_average_request(self):
+        self.average_request = (time.time() - self.last_request)*0.1 + self.average_request*0.9
+        return self.average_request
 
     def run(self):
         """Run until canceled."""
@@ -61,7 +69,7 @@ class P2PServer(Thread):
             return
         
         #self.logger.debug(f"Received message {message} from {sock.getpeername()}")
-
+        self.last_request = time.time()
         self.request_queue.put(message)
 
 
