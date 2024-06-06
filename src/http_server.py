@@ -17,7 +17,7 @@ class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
         return
 
     def do_POST(self):
-        with self.locker: # TODO: (remove this)  
+        with self.locker: # TODO: only allow one request at a time  
             if self.path.endswith("/solve"):
                 try:
                     length = int(self.headers.get('Content-Length'))

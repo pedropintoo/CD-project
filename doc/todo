@@ -19,4 +19,23 @@ Introdução ao problema do Sudoku
 - os nós que recebem o pedido, correm o check e devolvem o resultado ao nó inicial
 
 
+Aceitar 2 Sodukus (http deve conseguir distinguir clientes):
+- neste momento temos uma apenas uma thread a meter numa queue para pedidos e a seguinte fica locked até a primeira acabar de correr
+- temos que ter uma queue por thread de http, isto é, queremos controlar várias threads, queremos fazer pedidos ao mesmo servidor, servidor tem que conseguir distinguir e devolver à thread que me fez o pedido.
+- do lado do p2p ele vai ter que conseguir distinguir clientes e devolver a resposta ao cliente que fez o pedido. 
+- Provavelmente será necessário termos um broker, uma classe para fazer esta gestão. Este broker seria responsável de receber os pedidos e distingui-los. Não queremos aumentar a complexidade do lado do nosso servidor. Queremos colocar a complexidade do lado do broker. Em vez de termos uma dependência de N threads http para o nosso servidor, elas contactam o broker e o broker contacta o servidor. 
+
+
+Broker:
+- Quais seriam as estruturas envolvidas no nosso broker?
+- No broker vai ter que existir uma queue por thread, para que o broker consiga distinguir os pedidos.
+- Provavelmente uma queue de saída.
+ 
+
+
+
+
+Classes envolvidas:
+- http_server.py:
+- 
 
