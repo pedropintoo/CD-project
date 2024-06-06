@@ -25,7 +25,9 @@ class FloodingHelloMessage(Message):
                 "invalid": pending_stats["all"]["invalid"], "internal_invalid": pending_stats["all"]["internal_invalid"],
                 "validations": pending_stats["all"]["validations"], "internal_validations": pending_stats["all"]["internal_validations"]
             }, 
-            "nodes": [] # TODO
+            "nodes": [
+                st_info for st_info in pending_stats["nodes"]
+            ]
         } 
         self.data["args"] = {"aliveNodes": aliveNodes, "stats": stats}
         
@@ -41,7 +43,9 @@ class FloodingConfirmationMessage(Message):
                 "invalid": stats["all"]["invalid"], 
                 "validations": stats["all"]["validations"]
             }, 
-            "nodes": [] # TODO
+            "nodes": [
+                st_info for st_info in stats["nodes"]
+            ] 
         } 
         self.data["args"] = {"stats": stats}
         
@@ -77,8 +81,9 @@ class P2PProtocol:
     """P2P Protocol."""
         
     @classmethod
-    def flooding_hello(cls, replyAddress: str, aliveNodes: list, pending_stats: dict) -> FloodingHelloMessage:
+    def flooding_hello(cls, replyAddress: str, aliveNodes: list, pending_stats: dict, workers_stats: list) -> FloodingHelloMessage:
         """Creates a SolveRequestMessage object."""
+        pending_stats["nodes"] = workers_stats
         return FloodingHelloMessage(replyAddress, aliveNodes, pending_stats)
 
     @classmethod
