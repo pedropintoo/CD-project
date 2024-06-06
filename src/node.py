@@ -127,8 +127,26 @@ class Node:
         if updateNodes:
             for stat in stats["nodes"]:
                 host_port = stat["address"]
-                # TODO: ...
-        
+                baseValueReceived = stat["validations"]
+                incrementedValueReceived = stat["internal_validations"]
+
+                worker = self.wtManager.workersDict.get(host_port)
+                if worker is None:
+                    worker = self.wtManager.add_worker(host_port, socket=None)
+
+                myWorkerBaseValue = worker.pending_stats["validations"]
+
+                if baseValueReceived > myWorkerBaseValue:
+                    worker.pending_stats["validations"] = baseValueReceived
+                    worker.pending_stats["internal_validations"] = 0
+                    worker.pending_stats["external_validations"] = incrementedValueReceived    
+                elif baseValueReceived < myWorkerBaseValue:
+                    pass # TODO: wrong! must be incremented only one time!
+                else:
+                    # TODO: wrong! must be incremented only one time!
+                    worker.pending_stats["external_validations"] += incrementedValueReceived
+            return  
+            # TODO: herself stats      
         
         myBaseValue = self.pending_stats["all"][baseName] # from pending stats
         baseValueReceived = stats["all"][baseName]
@@ -140,12 +158,12 @@ class Node:
             self.pending_stats["all"]["external_"+baseName] = incrementedValueReceived
             self.pending_stats["numberOfResults"] = 0
         elif baseValueReceived < myBaseValue:
-            self.pending_stats["numberOfResults"] += 1
+            self.pending_stats["numberOfResults"] += 1 # TODO: WRONG! must be incremented only one time!
         else:
             self.pending_stats["numberOfResults"] += 1
             self.pending_stats["all"]["external_"+baseName] += incrementedValueReceived 
         
-        # TODO: nodes stats
+        
 
     def updateWithConfirmedStats(self, stats, host_port, baseName=None, updateNodes=False):
         """Update Stats with Confirmed Stats."""
@@ -220,7 +238,7 @@ class Node:
                 self.last_flooding = time.time()
 
                 self.updateWorkersStats()
-                self.updateNodesStats()
+                self.updateNetwork()
 
             self.wtManager.checkWorkersFloodingTimeouts() # kill inactive workers (if any)   
 
@@ -287,6 +305,7 @@ class Node:
                     self.updateWithReceivedStats(stats, baseName="solved")
                     self.updateWithReceivedStats(stats, baseName="invalid")
                     self.updateWithReceivedStats(stats, baseName="validations")
+                    self.updateWithReceivedStats(stats, updateNodes=True)
 
                     self.logger.warning(f"[{self.pending_stats['all']['solved']}, {self.pending_stats['all']['uncommitted_solved']}, {self.pending_stats['all']['external_solved'] }]")
 

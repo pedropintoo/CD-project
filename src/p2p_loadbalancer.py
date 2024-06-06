@@ -159,7 +159,7 @@ class WTManager:
         
 
     def add_worker(self, host_port: str, socket: socket) -> Worker:
-        """Add a worker to the workers list."""
+        """Create and add a worker to the workers list."""
         worker = Worker(host_port, socket)
         self.workersDict[host_port] = worker
         return worker
