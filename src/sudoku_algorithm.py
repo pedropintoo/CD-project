@@ -8,11 +8,12 @@ class SudokuAlgorithm:
         self.logger = logger
 
         self.recent_requests = deque()
-        self.handicap = handicap       # total handicap
+        # self.handicap = handicap       # total handicap
 
         # calculated in runtime
-        self.base_delay = 0.01    # delay applied when the number of requests exceeds the threshold
-        self.interval = 10       # interval to check if the number of requests exceeds the threshold
+        self.logger.critical(handicap)
+        self.base_delay = 0.001*handicap    # delay applied when the number of requests exceeds the threshold
+        self.interval = 0.1       # interval to check if the number of requests exceeds the threshold
         self.threshold = 5      # maximum number of requests allowed in the interval
 
     def __str__(self):
@@ -35,29 +36,21 @@ class SudokuAlgorithm:
         return string_representation
 
     def checkWithParams(self, sudoku: str):
-        if self.handicap > 1:
-            self.calculate_delay_params()
-            # self.logger.critical(f"Handicap: {self.handicap}, Base delay: {self.base_delay}, Interval: {self.interval}, Threshold: {self.threshold}")
-        else:
-            self.recent_requests = deque()
-             
         self.grid = sudoku
         return self.check()
 
-    def calculate_delay_params(self):
-        """Calculate the delay parameters based on the handicap."""
-        # Convert handicap from milliseconds to seconds
-        handicap_seconds = self.handicap / 1000.0
+    # def calculate_delay_params(self):
+    #     """Calculate the delay parameters based on the handicap."""
+
+    #     current_time = time.time()
+    #     num_requests = len([t for t in self.recent_requests if current_time - t < self.interval])
         
-        current_time = time.time()
-        num_requests = len([t for t in self.recent_requests if current_time - t < self.interval])
-        
-        if num_requests > self.threshold: 
-            self.base_delay = handicap_seconds*self.base_delay
-    
+        # if num_requests > self.threshold: 
+        #     self.partition_delay = self.base_delay / (num_requests - self.threshold)     
     
     def _limit_calls(self, base_delay=0.01, interval=10, threshold=5):
         """Limit the number of requests made to the Sudoku object."""
+        b = time.time()
         if base_delay is None:
             base_delay = self.base_delay
         if interval is None:
@@ -68,12 +61,17 @@ class SudokuAlgorithm:
         current_time = time.time()
         self.recent_requests.append(current_time)
         
-        self.recent_requests = deque([t for t in self.recent_requests if current_time - t < self.interval])
-        num_requests = len(self.recent_requests)
+        num_requests = len([t for t in self.recent_requests if current_time - t < self.interval])
 
+        c = time.time()
+        self.logger.warning(f"Num requests: {num_requests}")
         if num_requests > threshold:
-            delay = base_delay * (num_requests - threshold + 1)
+            # self.logger.critical(f"Base delay: {base_delay}")
+            
+            delay = base_delay / (num_requests - threshold)
             time.sleep(delay)
+        self.logger.info(f"Time sleep: {time.time() - c}")    
+        self.logger.warning(f"Time total: {time.time() - b}")    
 
     def check_row(self, row, base_delay=None, interval=None, threshold=None):
         """Check if the given row is correct."""
