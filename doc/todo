@@ -10,18 +10,7 @@ Optimização da distribuicao de recursos! Começar com carga baixa
 # TODO: kill the node! Also when CTRL-C this must kill the node...
 # TODO: must select the client to send the response (for now only one client is supported)
 
-Dúvidas:
-instância da class WTManager é única e única para todos os nós da rede?
 
-Ou cada nó tem um WTManager? Acho que é isto...
-
-Podia fazer isto? 2 opções em baixo:
-
-1) node.py connectWorker: # add itself as a worker self.wtManager.add_worker(self.p2p_server.replyAddress, socket=None) 
-
-
-2) class WTManager: # inicialize self.wprkersDict with the own worker
-self.workersDict: Dict[str, Worker] = {host_port: Worker(host_port, None) for host_port in ["localhost:7000"]}
 
 Introdução ao problema do Sudoku
 - gen.py - gera um tabuleiro de sudoku e o curl responsavel por fazer o request
