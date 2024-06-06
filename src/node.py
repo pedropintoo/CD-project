@@ -48,8 +48,8 @@ class Node:
 
         # Workers & Tasks Manager (load balancer)
         self.wtManager = WTManager(self.logger)
-        myWork = self.wtManager.add_worker(self.p2p_server.replyAddress, socket=None) # add itself as a worker
-        myWork.Alive = False # it is not alive, it is the node itself!
+        self.myWork = self.wtManager.add_worker(self.p2p_server.replyAddress, socket=None) # add itself as a worker
+        self.myWork.Alive = False # it is not alive, it is the node itself!
         
         self.solverConfig = SudokuAlgorithm(logger= self.logger, handicap = self.handicap)
 
