@@ -159,9 +159,6 @@ class Node:
 
         self.pending_stats["numberOfResults"] += 1 # In case of `-1` the value will be 0, otherwise it will be incremented
         
-        
-        
-
     def updateWithConfirmedStats(self, stats, host_port): 
         """Update Stats with Confirmed Stats."""
         for baseName in ["solved", "invalid"]:
@@ -335,8 +332,9 @@ class Node:
                     host_port = data["replyAddress"]
 
                     worker = self.connectWorker(host_port)
+                    self.wtManager.kill_worker(host_port, close_socket=False) # kill the worker if it is already connected
                     worker.flooding_received() # if the worker is not new it is a reconnection!
-
+                    
                     # reply with the list of nodes
                     msg = P2PProtocol.join_reply(aliveNodes=list(self.wtManager.get_alive_workers_address()))
                     self.send_msg(worker, msg)

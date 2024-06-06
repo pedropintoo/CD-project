@@ -120,8 +120,13 @@ class SudokuDynamicSplitter:
         self.solution = None
         
         _emptyCells = self._count_zeros(sudoku)
-        self.start = int(_emptyCells * '1')
-        self.end = int("1" + _emptyCells * '0')
+        if _emptyCells == 0:
+            self.start = 0
+            self.end = 0
+            self.solution = sudoku
+        else:
+            self.start = int(_emptyCells * '1')
+            self.end = int("1" + _emptyCells * '0')
 
     def get_splitted_task_id(self, task_size: int) -> TaskID:
         """Get a task of a given size."""
@@ -130,8 +135,9 @@ class SudokuDynamicSplitter:
             self.start += task_size
             return TaskID(self.sudoku_id, task_range_start, self.start)
         
+        task = TaskID(self.sudoku_id, self.start, self.end)
         self.start = self.end
-        return TaskID(self.sudoku_id, self.start, self.end)
+        return task
 
     def _count_zeros(self, matrix) -> int:
         count = 0
@@ -184,22 +190,6 @@ class WTManager:
         self.sudoku_id += 1 # TODO: it should came from the http broker
         self.current_sudoku = SudokuDynamicSplitter(sudoku, self.sudoku_id)
 
-        # emptyCells = self._count_zeros(sudoku)
-        # global_start = int(emptyCells * '1')
-        # global_end = int("1" + emptyCells * '0')
-
-        # TASK_UNIT_SIZE = 1000 # TODO: changed in run time !!
-        # while global_start + TASK_UNIT_SIZE <= global_end:
-        #     task_id = TaskID(self.sudoku_id, global_start, global_start + TASK_UNIT_SIZE)
-        #     self.pending_tasks_queue.append(task_id)
-        #     global_start += TASK_UNIT_SIZE
-
-        # # add the remaining tasks (if any)
-        # if global_start < global_end:    
-        #     task_id = TaskID(self.sudoku_id, global_start, global_end)
-        #     self.pending_tasks_queue.append(task_id)
-        
-
     def add_worker(self, host_port: str, socket: socket) -> Worker:
         """Create and add a worker to the workers list."""
         worker = Worker(host_port, socket)
@@ -209,7 +199,6 @@ class WTManager:
     def finish_task(self, task_id: TaskID, solution: str = None):
         """Remove a task from the working list."""
         task = self.working_tasks.get(task_id)
-
         if task is not None:
             task.worker.task_done()
             del self.working_tasks[task_id]
