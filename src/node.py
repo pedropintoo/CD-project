@@ -65,6 +65,7 @@ class Node:
             sock.connect((host_port.split(":")[0], int(host_port.split(":")[1])))
             sock.setblocking(False)
 
+            # get worker
             worker = self.wtManager.workersDict.get(host_port)
             if worker is not None:
                 if worker.socket is not None:
@@ -108,7 +109,6 @@ class Node:
 
     def commitPendingStats(self):
         """Commit Pending Stats."""
-        # stat = self.pending_stats["all"][baseName] ???
         
         for baseName in ["solved", "invalid"]:
             self.pending_stats["all"]["internal_"+baseName] = self.pending_stats["all"]["uncommitted_"+baseName]
