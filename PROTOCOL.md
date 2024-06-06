@@ -10,7 +10,6 @@
             "all" : {
                 "solved": 0, "internal_solved": 0,
                 "invalid": 0,"internal_invalid": 0,
-                "validations": 0, "internal_validations": 0 
             },
             "nodes": [ 
                 { 
@@ -37,7 +36,6 @@
             "all" : {
                 "solved": 0,
                 "invalid": 0,
-                "validations": 0, 
             },
             "nodes": [ 
                 { 

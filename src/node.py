@@ -354,7 +354,7 @@ class Node:
                         else:
                             worker = self.connectWorker(host_port)
 
-                        worker_stats = self.getWorkerStats()
+                        worker_stats = self.getWorkerStats() # normally this stats are all zeros...
                         msg = P2PProtocol.flooding_hello(self.p2p_server.replyAddress, aliveNodes, self.pending_stats.copy(), worker_stats)
                         self.send_msg(worker, msg)
 
