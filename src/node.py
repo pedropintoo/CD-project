@@ -354,9 +354,10 @@ class Node:
                         else:
                             worker = self.connectWorker(host_port)
 
-                        worker_stats = self.getWorkerStats() # normally this stats are all zeros...
-                        msg = P2PProtocol.flooding_hello(self.p2p_server.replyAddress, aliveNodes, self.pending_stats.copy(), worker_stats)
-                        self.send_msg(worker, msg)
+                        if worker is not None:
+                            worker_stats = self.getWorkerStats() # normally this stats are all zeros...
+                            msg = P2PProtocol.flooding_hello(self.p2p_server.replyAddress, aliveNodes, self.pending_stats.copy(), worker_stats)
+                            self.send_msg(worker, msg)
 
                 elif data["command"] == "SOLVE_REQUEST":                    
                     task_id = data["args"]["task_id"]
@@ -432,9 +433,9 @@ class Node:
             # check if completed
             if self.wtManager.isDone():
                 self.isHandlingHTTP = False
-                if len(self.wtManager.solutionsDict) > 0:
+                if self.wtManager.current_sudoku.solution is not None:
                     # TODO: must select the client to send the response (for now only one client is supported)
-                    solution = self.wtManager.solutionsDict.popitem()[1] # the first element is the sudoku_id solved!
+                    solution = self.wtManager.current_sudoku.solution 
                     self.logger.info(f"HTTP: Task done! {solution}")
                     self.http_server.response_queue.put(solution)
                     self.pending_stats["all"]["uncommitted_solved"] += 1
@@ -449,7 +450,7 @@ class Node:
                 # Retry tasks
                 for task in retry_tasks:
                     # build the tasks again
-                    sudoku = self.wtManager.get_sudoku(task.task_id)
+                    sudoku = self.wtManager.current_sudoku.sudoku
                     msg = P2PProtocol.solve_request(self.p2p_server.replyAddress, task.task_id, sudoku)
                     
                     # send the tasks to the worker
@@ -461,7 +462,7 @@ class Node:
                 # Send tasks
                 for task in tasks_to_send:
                     # build the tasks
-                    sudoku = self.wtManager.get_sudoku(task.task_id)
+                    sudoku = self.wtManager.current_sudoku.sudoku
                     msg = P2PProtocol.solve_request(self.p2p_server.replyAddress, task.task_id, sudoku)
 
                     # send the tasks to the worker

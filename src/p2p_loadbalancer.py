@@ -1,5 +1,5 @@
 import time
-from typing import Dict, List, Tuple, NamedTuple
+from typing import Dict, List, Tuple, NamedTuple, Deque
 from socket import socket
 
 class Worker:
@@ -25,6 +25,9 @@ class Worker:
 
         # response time factor
         self.smoothing_factor = smoothing_factor # TODO: increase when worker gets older (more stable)
+
+        # worker task size
+        self.task_size = 1000 # TODO: changed in run time !!
 
     def start_task(self):
         """Worker start a task."""
@@ -71,7 +74,7 @@ class Worker:
         self.update_task_response_time()
 
 class TaskID(NamedTuple):
-    sudoku_id: str
+    sudoku_id: int # TODO: remove! it should be in SudokuDynamicSplitter
     start: int
     end: int
 
@@ -109,27 +112,28 @@ class Task:
         """Increment the number of tries."""
         self.tries += 1
 
-# Workers & Tasks Manager (load balancer)
-class WTManager:
-    def __init__(self, logger):
-        # workers manager
-        self.workersDict: Dict[str, Worker] = {}
+# Dynamic Splitter of Sudoku
+class SudokuDynamicSplitter:
+    def __init__(self, sudoku: str, sudoku_id: int):
+        self.sudoku = sudoku
+        self.sudoku_id = sudoku_id
+        self.solution = None
+        
+        _emptyCells = self._count_zeros(sudoku)
+        self.start = int(_emptyCells * '1')
+        self.end = int("1" + _emptyCells * '0')
 
-        self.sudoku_id = 0
-        self.sudokusDict: Dict[str, str] = {} # sudoku_id -> sudoku
-        self.solutionsDict: Dict[str, str] = {} # sudoku_id -> solution
+    def get_splitted_task_id(self, task_size: int) -> TaskID:
+        """Get a task of a given size."""
+        if self.start + task_size <= self.end:
+            task_range_start = self.start
+            self.start += task_size
+            return TaskID(self.sudoku_id, task_range_start, self.start)
+        
+        self.start = self.end
+        return TaskID(self.sudoku_id, self.start, self.end)
 
-        # tasks manager
-        self.pending_tasks_queue: List[TaskID] = [] # TaskID, ..
-        self.working_tasks: Dict[TaskID, Task] = {} # TaskID -> Task
-
-        self.logger = logger  
-
-    def get_sudoku(self, task_id: TaskID) -> str:
-        """Get the sudoku by its id."""
-        return self.sudokusDict.get(task_id.sudoku_id)
-
-    def _count_zeros(self, matrix):
+    def _count_zeros(self, matrix) -> int:
         count = 0
         for row in matrix:
             for element in row:
@@ -137,25 +141,63 @@ class WTManager:
                     count += 1
         return count
 
+    def has_tasks(self) -> bool:
+        return self.start < self.end    
+
+# Workers & Tasks Manager (load balancer)
+class WTManager:
+    def __init__(self, logger):
+        # workers manager
+        self.workersDict: Dict[str, Worker] = {}
+
+        self.sudoku_id = 0
+        self.current_sudoku : SudokuDynamicSplitter = None
+
+        # tasks manager
+        self.pending_tasks_queue: List[TaskID] = [] # TaskID, ..
+        self.working_tasks: Dict[TaskID, Task] = {} # TaskID -> Task
+
+        self.logger = logger  
+
+    def get_task_to_worker(self, worker: Worker) -> Task:
+        """Get the task to assign to a worker."""
+        task_size = worker.task_size
+
+        if len(self.pending_tasks_queue) > 0:
+            task_id = self.pending_tasks_queue[0]
+            if task_id.end - task_id.start <= task_size:
+                # this task was abandoned by another worker
+                self.pending_tasks_queue.remove(task_id)
+                return Task(task_id, worker) 
+            else:
+                new_task_id = TaskID(task_id.sudoku_id, task_id.start, task_id.start + task_size)
+                task_id.start += task_size # update the abandoned task
+                return Task(new_task_id, worker)
+
+        task_id = self.current_sudoku.get_splitted_task_id(task_size)
+
+        return Task(task_id, worker)
+
     def add_pending_task(self, sudoku: str):
         """Add a task to the pending queue."""
-        # TODO: make it in runtime!!!
-        self.sudoku_id += 1
-        self.sudokusDict[self.sudoku_id] = sudoku
-        emptyCells = self._count_zeros(sudoku)
-        global_start = int(emptyCells * '1')
-        global_end = int("1" + emptyCells * '0')
+        
+        self.sudoku_id += 1 # TODO: it should came from the http broker
+        self.current_sudoku = SudokuDynamicSplitter(sudoku, self.sudoku_id)
 
-        TASK_UNIT_SIZE = 1000 # TODO: changed in run time !!
-        while global_start + TASK_UNIT_SIZE <= global_end:
-            task_id = TaskID(self.sudoku_id, global_start, global_start + TASK_UNIT_SIZE)
-            self.pending_tasks_queue.append(task_id)
-            global_start += TASK_UNIT_SIZE
+        # emptyCells = self._count_zeros(sudoku)
+        # global_start = int(emptyCells * '1')
+        # global_end = int("1" + emptyCells * '0')
 
-        # add the remaining tasks (if any)
-        if global_start < global_end:    
-            task_id = TaskID(self.sudoku_id, global_start, global_end)
-            self.pending_tasks_queue.append(task_id)
+        # TASK_UNIT_SIZE = 1000 # TODO: changed in run time !!
+        # while global_start + TASK_UNIT_SIZE <= global_end:
+        #     task_id = TaskID(self.sudoku_id, global_start, global_start + TASK_UNIT_SIZE)
+        #     self.pending_tasks_queue.append(task_id)
+        #     global_start += TASK_UNIT_SIZE
+
+        # # add the remaining tasks (if any)
+        # if global_start < global_end:    
+        #     task_id = TaskID(self.sudoku_id, global_start, global_end)
+        #     self.pending_tasks_queue.append(task_id)
         
 
     def add_worker(self, host_port: str, socket: socket) -> Worker:
@@ -176,11 +218,10 @@ class WTManager:
                 if task_id in self.pending_tasks_queue:
                     self.pending_tasks_queue.remove(task_id) # the responser is a dead worker
             except ValueError:
-                pass
+                pass # the task was already done
 
         if solution is not None:
-            self.solutionsDict[task_id.sudoku_id] = solution
-            self.sudokusDict.pop(task_id.sudoku_id, None)
+            self.current_sudoku.solution = solution
             
             # remove the sudoku from other workers 
             working_copy = self.working_tasks.copy()
@@ -196,7 +237,7 @@ class WTManager:
 
     def isDone(self) -> bool:
         """Check if all tasks are done."""
-        return not self.has_pending_tasks() and not self.has_working_tasks()
+        return self.current_sudoku.solution is not None or (not self.current_sudoku.has_tasks() and not self.has_pending_tasks() and not self.has_working_tasks())
 
     def has_pending_tasks(self) -> bool:
         """Check if there are pending tasks."""
@@ -225,7 +266,7 @@ class WTManager:
     def unassign_task(self, task: Task):
         """Remove a task from the working list and add it back to the pending queue."""
         self.pending_tasks_queue.append(task.task_id)
-        task.worker.crash() # TODO: FIX THIS!
+        task.worker.crash()
         del self.working_tasks[task.task_id]
 
     def get_ready_workers(self) -> List[Worker]:
@@ -276,14 +317,13 @@ class WTManager:
     def get_tasks_to_send(self) -> List[Task]:
         """Get new tasks with associated workers."""
         new_work_tasks = []
-        pending = self.pending_tasks_queue.copy()
 
         worker = self.get_best_worker() # if None: no workers available
         
-        while self.has_pending_tasks() and worker is not None:
-            task_id = self.pending_tasks_queue.pop(0)
-            
-            task = Task(task_id, worker)
+        while (self.has_pending_tasks() or self.current_sudoku.has_tasks()) and worker is not None:
+            task = self.get_task_to_worker(worker) # from pending tasks or sudoku queue (splitted task)
+            task_id = task.task_id
+
             self.working_tasks[task_id] = task
             new_work_tasks.append(task)
 
