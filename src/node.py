@@ -30,7 +30,6 @@ class Node:
             "all": {
                 "solved": 0, "internal_solved": 0, "external_solved": 0, "uncommitted_solved": 0,
                 "invalid": 0, "internal_invalid": 0, "external_invalid": 0, "uncommitted_invalid": 0, 
-                "validations": 0, "internal_validations": 0, "external_validations": 0, "uncommitted_validations": 0 # TODO: remove validations and use sum of nodes validations
             }
         }
 
@@ -49,6 +48,8 @@ class Node:
 
         # Workers & Tasks Manager (load balancer)
         self.wtManager = WTManager(self.logger)
+        myWork = self.wtManager.add_worker(self.p2p_server.replyAddress, socket=None) # add itself as a worker
+        myWork.Alive = False # it is not alive, it is the node itself!
         
         self.solverConfig = SudokuAlgorithm(logger= self.logger, handicap = self.handicap)
 
@@ -98,7 +99,7 @@ class Node:
 
     def updateSumStats(self):
         """Update Stats."""
-        for baseName in ["solved", "invalid", "validations"]:
+        for baseName in ["solved", "invalid"]:
             self.stats["all"][baseName] = self.pending_stats["all"][baseName] + self.pending_stats["all"]["internal_"+baseName] + self.pending_stats["all"]["external_"+baseName]
 
         for worker in self.wtManager.workersDict.values():
@@ -109,7 +110,7 @@ class Node:
         """Commit Pending Stats."""
         # stat = self.pending_stats["all"][baseName] ???
         
-        for baseName in ["solved", "invalid", "validations"]:
+        for baseName in ["solved", "invalid"]:
             self.pending_stats["all"]["internal_"+baseName] = self.pending_stats["all"]["uncommitted_"+baseName]
             self.pending_stats["all"]["uncommitted_"+baseName] = 0
 
@@ -121,7 +122,7 @@ class Node:
     def updateWithReceivedStats(self, stats):
         """Update Stats with Received Stats."""
         
-        for baseName in ["solved", "invalid", "validations"]:
+        for baseName in ["solved", "invalid"]:
             myBaseValue = self.pending_stats["all"][baseName] # from pending stats
             baseValueReceived = stats["all"][baseName]
             incrementedValueReceived = stats["all"]["internal_"+baseName]
@@ -140,6 +141,7 @@ class Node:
             worker = self.wtManager.workersDict.get(host_port)
             if worker is None:
                 worker = self.wtManager.add_worker(host_port, socket=None) # not connected yet. Is dead with high probability!
+                worker.Alive = False
 
             myWorkerBaseValue = worker.pending_stats["validations"]
             baseValueReceived = st_info["validations"]
@@ -162,7 +164,7 @@ class Node:
 
     def updateWithConfirmedStats(self, stats, host_port): 
         """Update Stats with Confirmed Stats."""
-        for baseName in ["solved", "invalid", "validations"]:
+        for baseName in ["solved", "invalid"]:
             myBaseValue = self.pending_stats["all"][baseName] + self.pending_stats["all"]["internal_"+baseName] + self.pending_stats["all"]["external_"+baseName]
             baseValueReceived = stats["all"][baseName]
             self.stats["all"][baseName] = myBaseValue
@@ -212,6 +214,7 @@ class Node:
         for worker in self.wtManager.get_alive_workers():
             self.network[worker.worker_address] = worker.network
 
+
     def updateWorkersStats(self):
         """Update workers stats."""
         workers_stats = []
@@ -220,6 +223,7 @@ class Node:
             workers_stats.append(worker.stats)
             total_validations += worker.stats["validations"]
         self.stats["nodes"] = sorted(workers_stats, key=lambda x: x["validations"], reverse=True)
+        self.stats["all"]["validations"] = total_validations
         # TODO: herself stats
 
     def run(self):
@@ -319,8 +323,6 @@ class Node:
 
                     self.updateWithReceivedStats(stats)
 
-                    self.logger.warning(f"[{self.pending_stats['all']['solved']}, {self.pending_stats['all']['uncommitted_solved']}, {self.pending_stats['all']['external_solved'] }]")
-
                 elif data["command"] == "FLOODING_CONFIRMATION":
                     # update baseValue if someone has a higher value (or higher round)
                     host_port = data["replyAddress"]
@@ -394,14 +396,15 @@ class Node:
                     validations = task_id.end - task_id.start
                     # # update flooding stats
                     worker.pending_stats["uncommitted_validations"] += validations
-                    self.pending_stats["all"]["uncommitted_validations"] += validations
                     self.logger.critical(f"Increment validations on worker {worker.worker_address}.")
 
 
             # I will send the confirmation only when I receive the result from all ALIVE nodes 
             if len(self.wtManager.get_alive_workers()) > 0 and self.pending_stats["numberOfResults"] >= len(self.wtManager.get_alive_workers()):
                 # update the stats with the pending stats
-                self.updateSumStats()              
+                self.updateSumStats()  
+
+                self.logger.warning(f"[{self.stats['all']['solved']}, {self.stats['all']['invalid']}, {self.stats['all']['validations'] }]")
                 
                 # broadcast the confirmation
                 for worker in self.wtManager.get_alive_workers():
@@ -413,8 +416,7 @@ class Node:
                     "numberOfResults": 0,
                     "all": {
                         "solved": self.stats["all"]["solved"], "internal_solved": 0, "external_solved": 0, "uncommitted_solved": self.pending_stats["all"]["uncommitted_solved"],
-                        "invalid": self.stats["all"]["invalid"], "internal_invalid": 0, "external_invalid": 0, "uncommitted_invalid": self.pending_stats["all"]["uncommitted_invalid"],
-                        "validations": self.stats["all"]["validations"], "internal_validations": 0, "external_validations": 0, "uncommitted_validations": self.pending_stats["all"]["uncommitted_validations"] # TODO: remove validations and use sum of nodes validations
+                        "invalid": self.stats["all"]["invalid"], "internal_invalid": 0, "external_invalid": 0, "uncommitted_invalid": self.pending_stats["all"]["uncommitted_invalid"]
                     }
                 }    
                 for worker in self.wtManager.workersDict.values():

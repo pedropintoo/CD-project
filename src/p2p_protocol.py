@@ -22,8 +22,7 @@ class FloodingHelloMessage(Message):
         stats = {
             "all": {
                 "solved": pending_stats["all"]["solved"], "internal_solved": pending_stats["all"]["internal_solved"],
-                "invalid": pending_stats["all"]["invalid"], "internal_invalid": pending_stats["all"]["internal_invalid"],
-                "validations": pending_stats["all"]["validations"], "internal_validations": pending_stats["all"]["internal_validations"]
+                "invalid": pending_stats["all"]["invalid"], "internal_invalid": pending_stats["all"]["internal_invalid"]
             }, 
             "nodes": [
                 st_info for st_info in pending_stats["nodes"]
@@ -40,8 +39,7 @@ class FloodingConfirmationMessage(Message):
         stats = {
             "all": {
                 "solved": stats["all"]["solved"], 
-                "invalid": stats["all"]["invalid"], 
-                "validations": stats["all"]["validations"]
+                "invalid": stats["all"]["invalid"]
             }, 
             "nodes": [
                 st_info for st_info in stats["nodes"]
