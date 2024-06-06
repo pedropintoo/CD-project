@@ -176,7 +176,14 @@ class Node:
             else:
                 self.logger.warning(f"Failed to connect to anchor {self.anchor}.")
                 # TODO: kill the node! Also when CTRL-C this must kill the node...
-
+                
+                # Retry connection
+                worker = self.connectWorker(self.anchor)
+                if worker is not None: # if the connection was successful
+                    msg = P2PProtocol.join_request(self.p2p_server.replyAddress)
+                    self.send_msg(worker, msg)
+                else:
+                    self.logger.warning(f"Failed to connect to anchor {self.anchor}.")
 
 ######### Main loop
         while True:
