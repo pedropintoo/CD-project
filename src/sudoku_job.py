@@ -1,4 +1,5 @@
 from src.sudoku_algorithm import SudokuAlgorithm
+from threading import Thread
 
 class Found(Exception): pass # Exception to stop the loop
 
@@ -11,7 +12,16 @@ class SudokuJob:
         self.end = end
         self.solution = None
 
-    def run(self):
+    def run(self, locker, queue, task_id, host_port):
+
+        thread = Thread(target=self.solve, args=(locker, queue, task_id, host_port))
+        thread.start()
+
+
+    def solve(self, locker=None, queue=None, task_id=None, host_port=None):
+        if locker is not None:
+            with locker:
+                self.solve(queue=queue, task_id=task_id, host_port=host_port)
         # 1. Fill the sudoku with the combinations from start to end
         try:
             for comb in range(self.start, self.end):
@@ -30,10 +40,11 @@ class SudokuJob:
                         raise Found
         except Found: pass
         # 3. If solution is found, return True
-        return self.solution
-
-    
-
+        if queue is not None:
+            solution = self.solution if self.solution is not None else "INVALID"
+            queue.put({"solution": solution, "task_id": task_id, "replyAddress": host_port})
+        else:
+            return self.solution
 
 
 

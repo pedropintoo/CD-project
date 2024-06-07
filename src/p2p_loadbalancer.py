@@ -38,6 +38,7 @@ class Worker:
     def flooding_received(self):  
         """Worker give signs of aliveness.""" 
         self.Alive = True
+        print(f"Worker {self.worker_address} is alive. {self.task_response_time}")
         self.last_flooding_received = time.time()
 
     def task_done(self):  
@@ -184,6 +185,7 @@ class WTManager:
                 return Task(task_id, worker) 
             else:
                 task_id = self.pending_tasks_queue.pop(0)
+                
                 new_task_id = TaskID(task_id.sudoku_id, task_id.start, task_id.start + task_size)
                 old_task_id = TaskID(task_id.sudoku_id, task_id.start + task_size, task_id.end)
                 self.pending_tasks_queue.insert(0, old_task_id)
@@ -192,6 +194,16 @@ class WTManager:
         task_id = self.current_sudoku.get_splitted_task_id(task_size)
 
         return Task(task_id, worker)
+
+    def update_worker_flooding(self, worker):
+        """Update the worker flooding time."""
+        worker.flooding_received()
+        isWorking = False
+        for task in self.working_tasks.values():
+            if task.worker == worker:
+                isWorking = True
+        if not isWorking:
+            worker.task_done()        
 
     def add_pending_task(self, sudoku: str):
         """Add a task to the pending queue."""

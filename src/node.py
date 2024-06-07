@@ -1,4 +1,5 @@
 import selectors, time, socket, queue, pickle, sys
+from threading import Lock
 from src.p2p_loadbalancer import WTManager, Worker, TaskID
 from src.p2p_server import P2PServer
 from src.http_server import HTTPServer
@@ -45,6 +46,8 @@ class Node:
 
         self.http_server = HTTPServer(self.logger, host, http_port, self.stats, self.network, max_threads)
         self.p2p_server = P2PServer(self.logger, host, p2p_port)
+        self.internal_solved_queue = queue.Queue() # 
+        self.solving_locker = Lock()
 
         # Workers & Tasks Manager (load balancer)
         self.wtManager = WTManager(self.logger)
@@ -260,7 +263,7 @@ class Node:
             sudoku_job = SudokuJob(self.wtManager.current_sudoku.sudoku, task_id.start, task_id.end, self.solverConfig)
             
             # Execute the task using SudokuJob
-            solution = sudoku_job.run()
+            solution = sudoku_job.solve()
 
             if solution is not None:
                 self.logger.info(f"Sudoku is valid. [by Dispatcher]")
@@ -320,9 +323,11 @@ class Node:
 
             self.wtManager.checkWorkersFloodingTimeouts() # kill inactive workers (if any)   
 
-            if self.isAlone:
-                # self.logger.debug("Alone node.")
-                pass
+            # get solved sudokus (if any)
+            try:
+                solved_reply = self.internal_solved_queue.get(block=False)
+            except queue.Empty:
+                solved_reply = None
 
             # get http request (if any)
             try:
@@ -339,6 +344,24 @@ class Node:
             except queue.Empty:
                 p2p_request = None 
             
+
+            # Handle reply solved sudokus requests (if any)
+            if solved_reply is not None:
+                task_id = solved_reply["task_id"]
+                host_port = solved_reply["replyAddress"]
+                solution = solved_reply["solution"]
+
+                worker = self.wtManager.workersDict.get(host_port)
+
+                if solution is not "INVALID":
+                    self.logger.debug(f"Sudoku is valid.")
+                    msg = P2PProtocol.solve_reply(self.p2p_server.replyAddress, task_id, solution)
+                else:
+                    self.logger.debug(f"Sudoku is invalid.")
+                    msg = P2PProtocol.solve_reply(self.p2p_server.replyAddress, task_id)    
+                
+                # Send the reply
+                self.send_msg(worker, msg)
 
             # Handle http requests (if any)
             if http_request is not None:
@@ -369,11 +392,8 @@ class Node:
                         if worker.socket == None:
                             # worker was dead and socket must be reconnected
                             self.connectWorker(host_port)
-                        if worker.isAvailable == False and not worker.Alive:
-                            worker.task_done()
-                            self.logger.error(f"Worker {worker.worker_address} came from deads!")
-                        worker.flooding_received() # update the last flooding time
-                        
+
+                        self.wtManager.update_worker_flooding(worker)
 
                     worker.network = aliveNodes # update worker network
 
@@ -441,19 +461,19 @@ class Node:
                     sudoku_job = SudokuJob(sudoku, start, end, self.solverConfig)
                     
                     # Execute the task using SudokuJob
-                    solution = sudoku_job.run()
+                    solution = sudoku_job.run(self.solving_locker, self.internal_solved_queue, task_id, host_port)
 
-                    worker = self.wtManager.workersDict.get(host_port)
+                    # worker = self.wtManager.workersDict.get(host_port)
 
-                    if solution is not None:
-                        self.logger.debug(f"Sudoku is valid.")
-                        msg = P2PProtocol.solve_reply(self.p2p_server.replyAddress, task_id, solution)
-                    else:
-                        self.logger.debug(f"Sudoku is invalid.")
-                        msg = P2PProtocol.solve_reply(self.p2p_server.replyAddress, task_id)    
+                    # if solution is not None:
+                    #     self.logger.debug(f"Sudoku is valid.")
+                    #     msg = P2PProtocol.solve_reply(self.p2p_server.replyAddress, task_id, solution)
+                    # else:
+                    #     self.logger.debug(f"Sudoku is invalid.")
+                    #     msg = P2PProtocol.solve_reply(self.p2p_server.replyAddress, task_id)    
                     
-                    # Send the reply
-                    self.send_msg(worker, msg)
+                    # # Send the reply
+                    # self.send_msg(worker, msg)
                     
                 elif data["command"] == "SOLVE_REPLY":
                     # Store the task as solved
