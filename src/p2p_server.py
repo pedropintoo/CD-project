@@ -8,6 +8,7 @@ from src.p2p_protocol import P2PProtocol
 class P2PServer(Thread):
     def __init__(self, logger, host, port):
         Thread.__init__(self)
+        self.daemon = True
         self.logger = logger
         self.replyAddress = f"{host}:{port}"
                 
@@ -26,7 +27,7 @@ class P2PServer(Thread):
         self._socket.setblocking(False)
 
     def _calculate_average_request(self):
-        return (time.time() - self.last_request)*0.75 + self.average_request*0.25
+        return (time.time() - self.last_request)*0.9 + self.average_request*0.1
 
     def get_average_request(self):
         return self._calculate_average_request()

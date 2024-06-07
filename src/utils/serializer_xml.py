@@ -2,10 +2,13 @@
 
 from xml.etree.ElementTree import Element, tostring, fromstring
 from xml.dom.minidom import parseString
+import re
 
 def dict_to_xml(data):
         def build_xml_element(parent, dict_data):
             for key, value in dict_data.items():
+                # Replace invalid characters in XML tags with underscores
+                key = re.sub(r'[^a-zA-Z0-9_]', '_', key)
                 elem = Element(key)
                 parent.append(elem)
                 if isinstance(value, dict):

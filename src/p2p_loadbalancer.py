@@ -24,7 +24,7 @@ class Worker:
         self.task_response_time = 10.0   # Exponential Moving Average response time
 
         # response time factor
-        self.smoothing_factor = smoothing_factor # TODO: increase when worker gets older (more stable)
+        self.smoothing_factor = smoothing_factor
 
         # worker task size
         self.task_size = 1000
@@ -38,6 +38,7 @@ class Worker:
     def flooding_received(self):  
         """Worker give signs of aliveness.""" 
         self.Alive = True
+        print(f"Worker {self.worker_address} is alive. {self.task_response_time}")
         self.last_flooding_received = time.time()
 
     def task_done(self):  
@@ -65,7 +66,7 @@ class Worker:
 
         # Recalculate
         elapsed_time = time.time() - self.last_flooding_received
-        if elapsed_time > 6: # TODO: thing about this limit value
+        if elapsed_time > 6: # TODO: thing about this limit value (and others...)
             self.Alive = False
 
         return not self.Alive
@@ -81,7 +82,7 @@ class Worker:
         self.update_task_response_time()
 
 class TaskID(NamedTuple):
-    sudoku_id: int # TODO: remove! it should be in SudokuDynamicSplitter
+    sudoku_id: int
     start: int
     end: int
 
@@ -176,27 +177,40 @@ class WTManager:
         """Get the task to assign to a worker."""
         task_size = worker.task_size
         
-        if len(self.pending_tasks_queue) > 0:
-            task_id = self.pending_tasks_queue[0]
-            if task_id.end - task_id.start <= task_size:
-                # this task was abandoned by another worker
-                self.pending_tasks_queue.remove(task_id)
-                return Task(task_id, worker) 
-            else:
-                task_id = self.pending_tasks_queue.pop(0)
-                new_task_id = TaskID(task_id.sudoku_id, task_id.start, task_id.start + task_size)
-                old_task_id = TaskID(task_id.sudoku_id, task_id.start + task_size, task_id.end)
-                self.pending_tasks_queue.insert(0, old_task_id)
-                return Task(new_task_id, worker)
+        if self.current_sudoku.has_tasks():
+            task_id = self.current_sudoku.get_splitted_task_id(task_size)
+            return Task(task_id, worker)
 
-        task_id = self.current_sudoku.get_splitted_task_id(task_size)
+        task_id = self.pending_tasks_queue[0]
+        if task_id.end - task_id.start <= task_size:
+            # this task was abandoned by another worker
+            self.pending_tasks_queue.remove(task_id)
+            return Task(task_id, worker) 
+        else:
+            task_id = self.pending_tasks_queue.pop(0)
+            
+            new_task_id = TaskID(task_id.sudoku_id, task_id.start, task_id.start + task_size)
+            old_task_id = TaskID(task_id.sudoku_id, task_id.start + task_size, task_id.end)
+            self.pending_tasks_queue.insert(0, old_task_id)
+            return Task(new_task_id, worker)
 
-        return Task(task_id, worker)
+
+    def update_worker_flooding(self, worker):
+        """Update the worker flooding time."""
+        worker.flooding_received()
+        isWorking = False
+        if worker.isAvailable == False:
+            for task in self.working_tasks.values():
+                if task.worker == worker:
+                    isWorking = True
+            if not isWorking:
+                worker.task_done() 
+                self.logger.info("UPDATE WORKER FLOODING: Worker is available again.") # with low probability!       
 
     def add_pending_task(self, sudoku: str):
         """Add a task to the pending queue."""
         
-        self.sudoku_id += 1 # TODO: it should came from the http broker
+        self.sudoku_id += 1 
         self.current_sudoku = SudokuDynamicSplitter(sudoku, self.sudoku_id)
 
     def add_worker(self, host_port: str, socket: socket) -> Worker:
@@ -312,7 +326,7 @@ class WTManager:
         """Get the worker with the lowest task response time."""
         best_worker = None
         for worker in self.get_ready_workers():
-            if best_worker is None or worker.task_response_time < best_worker.task_response_time: # TODO: worker response time! 
+            if best_worker is None or worker.task_response_time < best_worker.task_response_time:
                 best_worker = worker
         return best_worker
 

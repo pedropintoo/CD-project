@@ -1,4 +1,5 @@
 import selectors, time, socket, queue, pickle, sys
+from threading import Lock
 from src.p2p_loadbalancer import WTManager, Worker, TaskID
 from src.p2p_server import P2PServer
 from src.http_server import HTTPServer
@@ -45,12 +46,14 @@ class Node:
 
         self.http_server = HTTPServer(self.logger, host, http_port, self.stats, self.network, max_threads)
         self.p2p_server = P2PServer(self.logger, host, p2p_port)
+        self.internal_solved_queue = queue.Queue() # 
+        self.solving_locker = Lock()
 
         # Workers & Tasks Manager (load balancer)
         self.wtManager = WTManager(self.logger)
         self.myWork = self.wtManager.add_worker(self.p2p_server.replyAddress, socket=None) # add itself as a worker
         self.myWork.Alive = False           # it is not alive, it is the node itself!
-        self.myWork.smoothing_factor = 0.9 # TODO: !!!
+        self.myWork.smoothing_factor = 0.9 # TODO: analysis!!!
         self.myWork.task_done()
 
         self.solverConfig = SudokuAlgorithm(logger= self.logger, handicap = self.handicap)
@@ -115,7 +118,6 @@ class Node:
                 isChanged = True
 
         return isChanged        
-        # TODO: herself stats
 
     def commitPendingStats(self):
         """Commit Pending Stats."""
@@ -127,7 +129,6 @@ class Node:
         for worker in self.wtManager.workersDict.values():
             worker.pending_stats["internal_validations"] = worker.pending_stats["uncommitted_validations"]
             worker.pending_stats["uncommitted_validations"] = 0
-        # TODO: herself stats
 
     def updateWithReceivedStats(self, stats):
         """Update Stats with Received Stats."""
@@ -165,8 +166,6 @@ class Node:
             elif baseValueReceived == myWorkerBaseValue:
                 worker.pending_stats["external_validations"] += incrementedValueReceived
 
-        # TODO: herself stats
-
         self.pending_stats["numberOfResults"] += 1 # In case of `-1` the value will be 0, otherwise it will be incremented
         
     def updateWithConfirmedStats(self, stats, host_port): 
@@ -180,7 +179,7 @@ class Node:
                 self.stats["all"][baseName] = baseValueReceived
                 self.logger.critical(f"Update {baseName} to [{self.stats['all'][baseName]}].")
             elif baseValueReceived < myBaseValue:
-                self.logger.critical(f"Discard {baseName} [{baseValueReceived}] from {host_port}.") # TODO: remove # host_port is only for logging!
+                self.logger.critical(f"Discard {baseName} [{baseValueReceived}] from {host_port}.") 
 
             self.pending_stats["all"][baseName] = self.stats["all"][baseName]
             self.pending_stats["all"]["internal_"+baseName] = 0
@@ -202,14 +201,13 @@ class Node:
                 worker.stats["validations"] = baseValueReceived
                 self.logger.critical(f"Update validations to [{worker.stats['validations']}].")
             elif baseValueReceived < myWorkerBaseValue:
-                self.logger.critical(f"Discard validations [{baseValueReceived}] from {host_port}.") # TODO: remove 
+                self.logger.critical(f"Discard validations [{baseValueReceived}] from {host_port}.") 
 
             worker.pending_stats["validations"] = worker.stats["validations"]
             worker.pending_stats["internal_validations"] = 0
             worker.pending_stats["external_validations"] = 0 # Not update uncommitted.
             worker.pending_stats["numberOfResults"] = 0
 
-        # TODO: herself stats
 
     def getWorkerStats(self):
         """Get worker stats."""
@@ -231,7 +229,6 @@ class Node:
             total_validations += worker.stats["validations"]
         self.stats["nodes"] = sorted(workers_stats, key=lambda x: x["validations"], reverse=True)
         self.stats["all"]["validations"] = total_validations
-        # TODO: herself stats
 
     def isAlone(self):
         """Check if the node is alone."""
@@ -241,10 +238,10 @@ class Node:
         """Do tasks in dispatcher."""
 
         if self.p2p_server.request_queue.empty and self.wtManager.has_tasks():
-            max_factor = 0.5
+            max_factor = 0.25
             task_size_factor = max_factor
  
-            p2p_time = self.p2p_server.get_average_request()/100
+            p2p_time = self.p2p_server.get_average_request()/200
             if p2p_time <= max_factor:
                 task_size_factor = p2p_time
 
@@ -260,13 +257,12 @@ class Node:
             sudoku_job = SudokuJob(self.wtManager.current_sudoku.sudoku, task_id.start, task_id.end, self.solverConfig)
             
             # Execute the task using SudokuJob
-            solution = sudoku_job.run()
-
+            solution = sudoku_job.solve()
+            
             if solution is not None:
                 self.logger.info(f"Sudoku is valid. [by Dispatcher]")
 
-            if self.myWork.pending_stats['uncommitted_validations'] % 23 == 0: # only show a small part..
-                self.logger.debug(f"Dispatcher is working in free time... {task_id} [{self.myWork.task_response_time},{self.myWork.task_size}]")
+            self.logger.critical(f"Task {task_id} done by Dispatcher. [{self.myWork.task_response_time}]")
 
             self.wtManager.finish_task(task_id, solution) 
 
@@ -322,16 +318,17 @@ class Node:
 
             self.wtManager.checkWorkersFloodingTimeouts() # kill inactive workers (if any)   
 
-            if self.isAlone:
-                # self.logger.debug("Alone node.")
-                pass
+            # get solved sudokus (if any)
+            try:
+                solved_reply = self.internal_solved_queue.get(block=False)
+            except queue.Empty:
+                solved_reply = None
 
             # get http request (if any)
             try:
                 http_request = self.http_server.request_queue.get(block=False)
                 if http_request is not None: 
                     self.logger.debug(f"HTTP: Requested {http_request} tasks.")
-                    # self.myWork.task_response_time = 0.1 # TODO: check this
             except queue.Empty:
                 http_request = None
 
@@ -341,6 +338,24 @@ class Node:
             except queue.Empty:
                 p2p_request = None 
             
+
+            # Handle reply solved sudokus requests (if any)
+            if solved_reply is not None:
+                task_id = solved_reply["task_id"]
+                host_port = solved_reply["replyAddress"]
+                solution = solved_reply["solution"]
+
+                worker = self.wtManager.workersDict.get(host_port)
+
+                if solution is not "INVALID":
+                    self.logger.debug(f"Sudoku is valid.")
+                    msg = P2PProtocol.solve_reply(self.p2p_server.replyAddress, task_id, solution)
+                else:
+                    self.logger.debug(f"Sudoku is invalid.")
+                    msg = P2PProtocol.solve_reply(self.p2p_server.replyAddress, task_id)    
+                
+                # Send the reply
+                self.send_msg(worker, msg)
 
             # Handle http requests (if any)
             if http_request is not None:
@@ -371,7 +386,8 @@ class Node:
                         if worker.socket == None:
                             # worker was dead and socket must be reconnected
                             self.connectWorker(host_port)
-                        worker.flooding_received() # update the last flooding time
+
+                        self.wtManager.update_worker_flooding(worker)
 
                     worker.network = aliveNodes # update worker network
 
@@ -403,7 +419,7 @@ class Node:
                     worker = self.connectWorker(host_port)
                     self.wtManager.kill_worker(host_port, close_socket=False) # kill the worker if it is already connected
                     worker.flooding_received() # if the worker is not new it is a reconnection!
-                    
+
                     # reply with the list of nodes
                     msg = P2PProtocol.join_reply(aliveNodes=list(self.wtManager.get_alive_workers_address()))
                     self.send_msg(worker, msg)
@@ -438,19 +454,7 @@ class Node:
                     sudoku_job = SudokuJob(sudoku, start, end, self.solverConfig)
                     
                     # Execute the task using SudokuJob
-                    solution = sudoku_job.run()
-
-                    worker = self.wtManager.workersDict.get(host_port)
-
-                    if solution is not None:
-                        self.logger.debug(f"Sudoku is valid.")
-                        msg = P2PProtocol.solve_reply(self.p2p_server.replyAddress, task_id, solution)
-                    else:
-                        self.logger.debug(f"Sudoku is invalid.")
-                        msg = P2PProtocol.solve_reply(self.p2p_server.replyAddress, task_id)    
-                    
-                    # Send the reply
-                    self.send_msg(worker, msg)
+                    solution = sudoku_job.run(self.solving_locker, self.internal_solved_queue, task_id, host_port)
                     
                 elif data["command"] == "SOLVE_REPLY":
                     # Store the task as solved
@@ -502,7 +506,6 @@ class Node:
             if self.wtManager.isDone():
                 self.isHandlingHTTP = False
                 if self.wtManager.current_sudoku.solution is not None:
-                    # TODO: must select the client to send the response (for now only one client is supported)
                     solution = self.wtManager.current_sudoku.solution 
                     self.logger.info(f"HTTP: Task done! {solution}")
                     self.http_server.response_queue.put(solution)
