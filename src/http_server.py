@@ -3,6 +3,7 @@ import socketserver, socket, json
 from queue import Queue
 from threading import Lock, Thread
 from src.sudoku_algorithm import SudokuAlgorithm
+from src.utils.serializer_xml import dict_to_xml, parse_xml
 
 class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
     request_queue = None
@@ -17,14 +18,24 @@ class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
         return
 
     def do_POST(self):
-        with self.locker: # TODO: (remove this)  
+        with self.locker:  
             if self.path.endswith("/solve"):
                 try:
                     length = int(self.headers.get('Content-Length'))
                     data = self.rfile.read(length).decode('utf8')
-                
-                    # Try to parse the JSON data
-                    sudoku = json.loads(data)['sudoku']
+
+                    content_type = self.headers.get('Content-Type', 'application/json')
+                    
+                    if 'application/xml' in content_type:
+                        # Try to parse the XML data
+                        sudoku = parse_xml(data)['sudoku']
+                        self.logger.critical("XML")
+                        self.logger.critical(sudoku)
+                    else:
+                        # Try to parse the JSON data
+                        sudoku = json.loads(data)['sudoku']
+                        self.logger.critical(sudoku)
+ 
                     self.logger.warning(f"HTTP request for {sudoku}.")
                     
                     # Put the request in the queue
@@ -53,27 +64,34 @@ class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
                 self.send_response(404)
                 self.end_headers()
                 self.wfile.write(b"404 Not Found\n")
-                
+    
     def do_GET(self):
         # Handle the stats request
         if self.path.endswith("/stats"):
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            response_data = json.dumps(self.stats, indent=4) + "\n"
-            self.wfile.write(response_data.encode("utf8"))
+            self._handle_get_request(self.stats)
             
         # Handle the network request
         elif self.path.endswith("/network"):
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-            response_data = json.dumps(self.network, indent=4) + "\n"
-            self.wfile.write(response_data.encode("utf8")) 
+            self._handle_get_request(self.network)
         else:
             self.send_response(404)
             self.end_headers()
             self.wfile.write(b"404 Not Found\n")
+
+    def _handle_get_request(self, data):
+        content_type = self.headers.get('Content-Type', 'application/json')
+        if 'application/xml' in content_type:
+            self.send_response(200)
+            self.send_header('Content-type', 'application/xml')
+            self.end_headers()
+            response_data = dict_to_xml(data)
+            self.wfile.write(response_data.encode('utf8'))
+        else:
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            response_data = json.dumps(data, indent=4) + "\n"
+            self.wfile.write(response_data.encode("utf8"))
 
 
 class HTTPServerThread(Thread):

@@ -62,3 +62,122 @@ def _limit_calls(self, base_delay=0.01, interval=10, threshold=5):
 1min20 com handicap = 1e-10
 min com handicap = 2e-10
 
+
+
+## XML AND JSON
+
+curl http://localhost:8000/solve -X POST -H 'Content-Type: application/json' -d '{"sudoku": [[6, 7, 9, 4, 3, 0, 8, 1, 5], [3, 5, 8, 9, 1, 7, 2, 6, 4], [4, 2, 1, 5, 8, 6, 7, 9, 3], [9, 4, 3, 6, 0, 1, 5, 2, 8], [5, 1, 2, 8, 9, 0, 3, 7, 6], [8, 6, 7, 2, 5, 3, 1, 4, 9], [7, 9, 6, 3, 2, 5, 4, 8, 0], [2, 8, 5, 0, 4, 9, 6, 3, 7], [1, 3, 4, 7, 6, 8, 9, 5, 2]] }'
+
+curl http://localhost:8000/solve -X POST -H 'Content-Type: application/xml' -d '<request><sudoku><row><cell>6</cell><cell>7</cell><cell>9</cell><cell>4</cell><cell>3</cell><cell>0</cell><cell>8</cell><cell>1</cell><cell>5</cell></row><row><cell>3</cell><cell>5</cell><cell>8</cell><cell>9</cell><cell>1</cell><cell>7</cell><cell>2</cell><cell>6</cell><cell>4</cell></row><row><cell>4</cell><cell>2</cell><cell>1</cell><cell>5</cell><cell>8</cell><cell>6</cell><cell>7</cell><cell>9</cell><cell>3</cell></row><row><cell>9</cell><cell>4</cell><cell>3</cell><cell>6</cell><cell>0</cell><cell>1</cell><cell>5</cell><cell>2</cell><cell>8</cell></row><row><cell>5</cell><cell>1</cell><cell>2</cell><cell>8</cell><cell>9</cell><cell>0</cell><cell>3</cell><cell>7</cell><cell>6</cell></row><row><cell>8</cell><cell>6</cell><cell>7</cell><cell>2</cell><cell>5</cell><cell>3</cell><cell>1</cell><cell>4</cell><cell>9</cell></row><row><cell>7</cell><cell>9</cell><cell>6</cell><cell>3</cell><cell>2</cell><cell>5</cell><cell>4</cell><cell>8</cell><cell>0</cell></row><row><cell>2</cell><cell>8</cell><cell>5</cell><cell>0</cell><cell>4</cell><cell>9</cell><cell>6</cell><cell>3</cell><cell>7</cell></row><row><cell>1</cell><cell>3</cell><cell>4</cell><cell>7</cell><cell>6</cell><cell>8</cell><cell>9</cell><cell>5</cell><cell>2</cell></row></sudoku></request>'
+
+
+curl http://localhost:8000/stats -X GET -H "Content-Type: application/json"
+curl http://localhost:8000/stats -X GET -H "Content-Type: application/xml"
+curl http://localhost:8000/stats -X GET
+
+
+
+Estrutura do puzzle xml:
+<request>
+    <sudoku>
+        <row>
+            <cell>6</cell>
+            <cell>7</cell>
+            <cell>9</cell>
+            <cell>4</cell>
+            <cell>3</cell>
+            <cell>0</cell>
+            <cell>8</cell>
+            <cell>1</cell>
+            <cell>5</cell>
+        </row>
+        <row>
+            <cell>3</cell>
+            <cell>5</cell>
+            <cell>8</cell>
+            <cell>9</cell>
+            <cell>1</cell>
+            <cell>7</cell>
+            <cell>2</cell>
+            <cell>6</cell>
+            <cell>4</cell>
+        </row>
+        <row>
+            <cell>4</cell>
+            <cell>2</cell>
+            <cell>1</cell>
+            <cell>5</cell>
+            <cell>8</cell>
+            <cell>6</cell>
+            <cell>7</cell>
+            <cell>9</cell>
+            <cell>3</cell>
+        </row>
+        <row>
+            <cell>9</cell>
+            <cell>4</cell>
+            <cell>3</cell>
+            <cell>6</cell>
+            <cell>0</cell>
+            <cell>1</cell>
+            <cell>5</cell>
+            <cell>2</cell>
+            <cell>8</cell>
+        </row>
+        <row>
+            <cell>5</cell>
+            <cell>1</cell>
+            <cell>2</cell>
+            <cell>8</cell>
+            <cell>9</cell>
+            <cell>0</cell>
+            <cell>3</cell>
+            <cell>7</cell>
+            <cell>6</cell>
+        </row>
+        <row>
+            <cell>8</cell>
+            <cell>6</cell>
+            <cell>7</cell>
+            <cell>2</cell>
+            <cell>5</cell>
+            <cell>3</cell>
+            <cell>1</cell>
+            <cell>4</cell>
+            <cell>9</cell>
+        </row>
+        <row>
+            <cell>7</cell>
+            <cell>9</cell>
+            <cell>6</cell>
+            <cell>3</cell>
+            <cell>2</cell>
+            <cell>5</cell>
+            <cell>4</cell>
+            <cell>8</cell>
+            <cell>0</cell>
+        </row>
+        <row>
+            <cell>2</cell>
+            <cell>8</cell>
+            <cell>5</cell>
+            <cell>0</cell>
+            <cell>4</cell>
+            <cell>9</cell>
+            <cell>6</cell>
+            <cell>3</cell>
+            <cell>7</cell>
+        </row>
+        <row>
+            <cell>1</cell>
+            <cell>3</cell>
+            <cell>4</cell>
+            <cell>7</cell>
+            <cell>6</cell>
+            <cell>8</cell>
+            <cell>9</cell>
+            <cell>5</cell>
+            <cell>2</cell>
+        </row>
+    </sudoku>
+</request>
