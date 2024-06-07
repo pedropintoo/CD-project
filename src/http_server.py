@@ -3,7 +3,7 @@ import socketserver, socket, json
 from queue import Queue
 from threading import Lock, Thread
 from src.sudoku_algorithm import SudokuAlgorithm
-from src.http_middleware import Middleware
+from src.http_serialization import HttpSerialization
 
 class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
     request_queue = None
@@ -24,7 +24,7 @@ class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
                     length = int(self.headers.get('Content-Length'))
                     data = self.rfile.read(length).decode('utf8')
 
-                    sudoku = Middleware.parse_request(self.headers, data)
+                    sudoku = HttpSerialization.parse_request(self.headers, data)
  
                     self.logger.warning(f"HTTP request for {sudoku}.")
                     
@@ -69,7 +69,7 @@ class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
             self.wfile.write(b"404 Not Found\n")
 
     def _handle_get_request(self, data):
-        content_type, response_data = Middleware.format_response(self.headers, data)
+        content_type, response_data = HttpSerialization.format_response(self.headers, data)
         self.send_response(200)
         self.send_header('Content-type', content_type)
         self.end_headers()

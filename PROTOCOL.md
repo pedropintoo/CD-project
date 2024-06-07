@@ -1,5 +1,5 @@
 
-## `FLOODING_HELLO` -> Any node  
+## `FLOODING_HELLO` -> Alive nodes  
 ```json
 {
     "command": "FLOODING_HELLO",
@@ -26,7 +26,7 @@
 ```
 
 
-## `FLOODING_CONFIRMATION` -> Any node 
+## `FLOODING_CONFIRMATION` -> Consensus nodes 
 ```json
 {
     "command": "FLOODING_CONFIRMATION",
@@ -70,7 +70,7 @@
 ``` 
 
 
-## `SOLVE_REQUEST` -> Any node
+## `SOLVE_REQUEST` -> Alive nodes
 ```json
 {
     "command": "SOLVE_REQUEST",

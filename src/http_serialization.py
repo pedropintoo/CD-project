@@ -4,7 +4,7 @@ import json
 from xml.etree.ElementTree import fromstring
 from src.utils.serializer_xml import dict_to_xml, parse_xml
 
-class Middleware:
+class HttpSerialization:
     @staticmethod
     def parse_request(headers, data):
         content_type = headers.get('Content-Type', 'application/json')
