@@ -244,7 +244,7 @@ class Node:
             max_factor = 0.5
             task_size_factor = max_factor
  
-            p2p_time = self.p2p_server.get_average_request()/100
+            p2p_time = self.p2p_server.get_average_request()/200
             if p2p_time <= max_factor:
                 task_size_factor = p2p_time
 
