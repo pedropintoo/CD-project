@@ -24,7 +24,7 @@ class Worker:
         self.task_response_time = 10.0   # Exponential Moving Average response time
 
         # response time factor
-        self.smoothing_factor = smoothing_factor # TODO: increase when worker gets older (more stable)
+        self.smoothing_factor = smoothing_factor
 
         # worker task size
         self.task_size = 1000
@@ -66,7 +66,7 @@ class Worker:
 
         # Recalculate
         elapsed_time = time.time() - self.last_flooding_received
-        if elapsed_time > 6: # TODO: thing about this limit value
+        if elapsed_time > 6: # TODO: thing about this limit value (and others...)
             self.Alive = False
 
         return not self.Alive
@@ -82,7 +82,7 @@ class Worker:
         self.update_task_response_time()
 
 class TaskID(NamedTuple):
-    sudoku_id: int # TODO: remove! it should be in SudokuDynamicSplitter
+    sudoku_id: int
     start: int
     end: int
 
@@ -205,12 +205,12 @@ class WTManager:
                     isWorking = True
             if not isWorking:
                 worker.task_done() 
-                self.logger.info("UPDATE WORKER FLOODING: Worker is available again.")       
+                self.logger.info("UPDATE WORKER FLOODING: Worker is available again.") # with low probability!       
 
     def add_pending_task(self, sudoku: str):
         """Add a task to the pending queue."""
         
-        self.sudoku_id += 1 # TODO: it should came from the http broker
+        self.sudoku_id += 1 
         self.current_sudoku = SudokuDynamicSplitter(sudoku, self.sudoku_id)
 
     def add_worker(self, host_port: str, socket: socket) -> Worker:
@@ -326,7 +326,7 @@ class WTManager:
         """Get the worker with the lowest task response time."""
         best_worker = None
         for worker in self.get_ready_workers():
-            if best_worker is None or worker.task_response_time < best_worker.task_response_time: # TODO: worker response time! 
+            if best_worker is None or worker.task_response_time < best_worker.task_response_time:
                 best_worker = worker
         return best_worker
 

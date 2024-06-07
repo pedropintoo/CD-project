@@ -15,6 +15,7 @@ class SudokuJob:
     def run(self, locker, queue, task_id, host_port):
         
         thread = Thread(target=self.solve_locking, args=(locker, queue, task_id, host_port))
+        thread.daemon = True
         thread.start()
 
     def solve_locking(self, locker=None, queue=None, task_id=None, host_port=None):

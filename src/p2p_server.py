@@ -8,6 +8,7 @@ from src.p2p_protocol import P2PProtocol
 class P2PServer(Thread):
     def __init__(self, logger, host, port):
         Thread.__init__(self)
+        self.daemon = True
         self.logger = logger
         self.replyAddress = f"{host}:{port}"
                 
