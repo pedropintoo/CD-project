@@ -3,7 +3,7 @@ import socketserver, socket, json
 from queue import Queue
 from threading import Lock, Thread
 from src.sudoku_algorithm import SudokuAlgorithm
-from src.middleware import Middleware
+from src.http_middleware import Middleware
 
 class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
     request_queue = None
@@ -25,7 +25,6 @@ class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
                     data = self.rfile.read(length).decode('utf8')
 
                     sudoku = Middleware.parse_request(self.headers, data)
-                    self.logger.critical(sudoku)
  
                     self.logger.warning(f"HTTP request for {sudoku}.")
                     
