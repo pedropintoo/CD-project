@@ -177,33 +177,35 @@ class WTManager:
         """Get the task to assign to a worker."""
         task_size = worker.task_size
         
-        if len(self.pending_tasks_queue) > 0:
-            task_id = self.pending_tasks_queue[0]
-            if task_id.end - task_id.start <= task_size:
-                # this task was abandoned by another worker
-                self.pending_tasks_queue.remove(task_id)
-                return Task(task_id, worker) 
-            else:
-                task_id = self.pending_tasks_queue.pop(0)
-                
-                new_task_id = TaskID(task_id.sudoku_id, task_id.start, task_id.start + task_size)
-                old_task_id = TaskID(task_id.sudoku_id, task_id.start + task_size, task_id.end)
-                self.pending_tasks_queue.insert(0, old_task_id)
-                return Task(new_task_id, worker)
+        if self.current_sudoku.has_tasks():
+            task_id = self.current_sudoku.get_splitted_task_id(task_size)
+            return Task(task_id, worker)
 
-        task_id = self.current_sudoku.get_splitted_task_id(task_size)
+        task_id = self.pending_tasks_queue[0]
+        if task_id.end - task_id.start <= task_size:
+            # this task was abandoned by another worker
+            self.pending_tasks_queue.remove(task_id)
+            return Task(task_id, worker) 
+        else:
+            task_id = self.pending_tasks_queue.pop(0)
+            
+            new_task_id = TaskID(task_id.sudoku_id, task_id.start, task_id.start + task_size)
+            old_task_id = TaskID(task_id.sudoku_id, task_id.start + task_size, task_id.end)
+            self.pending_tasks_queue.insert(0, old_task_id)
+            return Task(new_task_id, worker)
 
-        return Task(task_id, worker)
 
     def update_worker_flooding(self, worker):
         """Update the worker flooding time."""
         worker.flooding_received()
         isWorking = False
-        for task in self.working_tasks.values():
-            if task.worker == worker:
-                isWorking = True
-        if not isWorking:
-            worker.task_done()        
+        if worker.isAvailable == False:
+            for task in self.working_tasks.values():
+                if task.worker == worker:
+                    isWorking = True
+            if not isWorking:
+                worker.task_done() 
+                self.logger.info("UPDATE WORKER FLOODING: Worker is available again.")       
 
     def add_pending_task(self, sudoku: str):
         """Add a task to the pending queue."""

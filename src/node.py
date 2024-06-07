@@ -244,7 +244,7 @@ class Node:
         """Do tasks in dispatcher."""
 
         if self.p2p_server.request_queue.empty and self.wtManager.has_tasks():
-            max_factor = 0.5
+            max_factor = 0.25
             task_size_factor = max_factor
  
             p2p_time = self.p2p_server.get_average_request()/200
@@ -264,10 +264,11 @@ class Node:
             
             # Execute the task using SudokuJob
             solution = sudoku_job.solve()
-
+            
             if solution is not None:
                 self.logger.info(f"Sudoku is valid. [by Dispatcher]")
 
+            self.logger.critical(f"Task {task_id} done by Dispatcher. [{self.myWork.task_response_time}]")
 
             self.wtManager.finish_task(task_id, solution) 
 
