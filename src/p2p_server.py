@@ -25,8 +25,14 @@ class P2PServer(Thread):
         self._socket.listen(100)
         self._socket.setblocking(False)
 
+    def _calculate_average_request(self):
+        return (time.time() - self.last_request)*0.75 + self.average_request*0.25
+
+    def get_average_request(self):
+        return self._calculate_average_request()
+
     def update_average_request(self):
-        self.average_request = (time.time() - self.last_request)*0.1 + self.average_request*0.9
+        self.average_request = self._calculate_average_request()
         return self.average_request
 
     def run(self):

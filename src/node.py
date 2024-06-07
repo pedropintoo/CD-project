@@ -50,10 +50,9 @@ class Node:
         self.wtManager = WTManager(self.logger)
         self.myWork = self.wtManager.add_worker(self.p2p_server.replyAddress, socket=None) # add itself as a worker
         self.myWork.Alive = False           # it is not alive, it is the node itself!
-        self.myWork.task_size_factor = 0.05  #
         self.myWork.smoothing_factor = 0.9 # TODO: !!!
         self.myWork.task_done()
-        self.first = 0
+
         self.solverConfig = SudokuAlgorithm(logger= self.logger, handicap = self.handicap)
     
 
@@ -102,11 +101,20 @@ class Node:
 
     def updateSumStats(self):
         """Update Stats."""
+        isChanged = False
         for baseName in ["solved", "invalid"]:
-            self.stats["all"][baseName] = self.pending_stats["all"][baseName] + self.pending_stats["all"]["internal_"+baseName] + self.pending_stats["all"]["external_"+baseName]
+            new_value = self.pending_stats["all"][baseName] + self.pending_stats["all"]["internal_"+baseName] + self.pending_stats["all"]["external_"+baseName]
+            if new_value != self.stats["all"][baseName]:
+                self.stats["all"][baseName] = new_value
+                isChanged = True
 
         for worker in self.wtManager.workersDict.values():
-            worker.stats["validations"] = worker.pending_stats["validations"] + worker.pending_stats["internal_validations"] + worker.pending_stats["external_validations"]
+            new_value = worker.pending_stats["validations"] + worker.pending_stats["internal_validations"] + worker.pending_stats["external_validations"]
+            if new_value != worker.stats["validations"]:
+                worker.stats["validations"] = new_value
+                isChanged = True
+
+        return isChanged        
         # TODO: herself stats
 
     def commitPendingStats(self):
@@ -225,21 +233,24 @@ class Node:
         self.stats["all"]["validations"] = total_validations
         # TODO: herself stats
 
+    def isAlone(self):
+        """Check if the node is alone."""
+        return len(self.wtManager.get_alive_workers()) == 0
+
     def doTasksInDispatcher(self):
         """Do tasks in dispatcher."""
-        if self.first == 10:
-            return
-        
-        task_size_factor = self.p2p_server.update_average_request()
-        if task_size_factor > self.TIME_TO_FLOODING/2:
-            task_size_factor = self.TIME_TO_FLOODING/2
-
-        self.logger.critical(self.myWork.task_size)  
-        # self.first += 1
-        # self.myWork.task_size += 1
-        self.myWork.task_size = int(self.myWork.task_size * (task_size_factor / self.myWork.task_response_time))
 
         if self.p2p_server.request_queue.empty and self.wtManager.has_tasks():
+            max_factor = 0.5
+            task_size_factor = max_factor
+ 
+            p2p_time = self.p2p_server.get_average_request()/100
+            if p2p_time <= max_factor:
+                task_size_factor = p2p_time
+
+            self.myWork.task_size_factor = task_size_factor
+            
+            # self.logger.warning(self.p2p_server.get_average_request())
             task = self.wtManager.get_task_to_worker(self.myWork)
             task_id = task.task_id
 
@@ -252,14 +263,28 @@ class Node:
             solution = sudoku_job.run()
 
             if solution is not None:
-                self.logger.debug(f"Sudoku is valid. [by Dispatcher]")
+                self.logger.info(f"Sudoku is valid. [by Dispatcher]")
+
+            if self.myWork.pending_stats['uncommitted_validations'] % 23 == 0: # only show a small part..
+                self.logger.debug(f"Dispatcher is working in free time... {task_id} [{self.myWork.task_response_time},{self.myWork.task_size}]")
 
             self.wtManager.finish_task(task_id, solution) 
 
             validations = task_id.end - task_id.start # update flooding stats
             self.myWork.pending_stats["uncommitted_validations"] += validations
 
-            self.logger.debug(f"Dispatcher is working in free time... {task_id} [{self.myWork.task_response_time},{self.myWork.task_size}]")
+    def setupNextRound(self):  
+        self.pending_stats = {  
+            "numberOfResults": 0,
+            "all": {
+                "solved": self.stats["all"]["solved"], "internal_solved": 0, "external_solved": 0, "uncommitted_solved": self.pending_stats["all"]["uncommitted_solved"],
+                "invalid": self.stats["all"]["invalid"], "internal_invalid": 0, "external_invalid": 0, "uncommitted_invalid": self.pending_stats["all"]["uncommitted_invalid"]
+            }
+        }    
+        for worker in self.wtManager.workersDict.values():
+            worker.pending_stats = {
+                "validations": worker.stats["validations"], "internal_validations": 0, "external_validations": 0, "uncommitted_validations": worker.pending_stats["uncommitted_validations"]
+            } 
 
 
     def run(self):
@@ -297,6 +322,9 @@ class Node:
 
             self.wtManager.checkWorkersFloodingTimeouts() # kill inactive workers (if any)   
 
+            if self.isAlone:
+                # self.logger.debug("Alone node.")
+                pass
 
             # get http request (if any)
             try:
@@ -325,6 +353,7 @@ class Node:
       
             # Handle p2p requests (if any)     
             if p2p_request is not None:
+                self.p2p_server.update_average_request()
                 data = p2p_request.data # get data attribute from the message
                 self.logger.debug(f"P2P-received: {data['command']}")
                 
@@ -439,29 +468,29 @@ class Node:
 
 
             # I will send the confirmation only when I receive the result from all ALIVE nodes 
-            if len(self.wtManager.get_alive_workers()) > 0 and self.pending_stats["numberOfResults"] >= len(self.wtManager.get_alive_workers()):
+            if (len(self.wtManager.get_alive_workers()) > 0 and self.pending_stats["numberOfResults"] >= len(self.wtManager.get_alive_workers())):
                 # update the stats with the pending stats
-                self.updateSumStats()  
+                isChanged = self.updateSumStats()  
 
-                self.logger.warning(f"[{self.stats['all']['solved']}, {self.stats['all']['invalid']}, {self.stats['all']['validations'] }]")
-                
+                if isChanged:
+                    self.logger.warning(f"[{self.stats['all']['solved']}, {self.stats['all']['invalid']}, {self.stats['all']['validations'] }]")
+
                 # broadcast the confirmation
                 for worker in self.wtManager.get_alive_workers():
                     msg = P2PProtocol.flooding_confirmation(self.p2p_server.replyAddress, self.stats.copy())
                     self.send_msg(worker, msg)
                 
                 # setup for the next round
-                self.pending_stats = {  
-                    "numberOfResults": 0,
-                    "all": {
-                        "solved": self.stats["all"]["solved"], "internal_solved": 0, "external_solved": 0, "uncommitted_solved": self.pending_stats["all"]["uncommitted_solved"],
-                        "invalid": self.stats["all"]["invalid"], "internal_invalid": 0, "external_invalid": 0, "uncommitted_invalid": self.pending_stats["all"]["uncommitted_invalid"]
-                    }
-                }    
-                for worker in self.wtManager.workersDict.values():
-                    worker.pending_stats = {
-                        "validations": worker.stats["validations"], "internal_validations": 0, "external_validations": 0, "uncommitted_validations": worker.pending_stats["uncommitted_validations"]
-                    }       
+                self.setupNextRound()
+                self.updateWorkersStats()
+            elif self.isAlone():
+                # update the stats with the pending stats
+                isChanged = self.updateSumStats()
+                if isChanged:
+                    self.logger.warning(f"[{self.stats['all']['solved']}, {self.stats['all']['invalid']}, {self.stats['all']['validations'] }]")
+                # setup for the next round
+                self.setupNextRound()
+                self.updateWorkersStats()
 
 
             if not self.isHandlingHTTP:

@@ -52,6 +52,9 @@ class Worker:
         self.task_response_time = (self.smoothing_factor * elapsed_time +
                                     (1 - self.smoothing_factor) * self.task_response_time)
         
+        if self.task_size == 0:
+            self.task_size = 1 
+
         # limit task_response_time to task_size_factor with task_size
         self.task_size = int(self.task_size * (self.task_size_factor / self.task_response_time))
         # print(f"TASK : {self.task_size}, {self.task_size_factor} {self.task_response_time}")
@@ -180,8 +183,10 @@ class WTManager:
                 self.pending_tasks_queue.remove(task_id)
                 return Task(task_id, worker) 
             else:
+                task_id = self.pending_tasks_queue.pop(0)
                 new_task_id = TaskID(task_id.sudoku_id, task_id.start, task_id.start + task_size)
-                task_id._replace(start=task_id.start+task_size) # update the abandoned task
+                old_task_id = TaskID(task_id.sudoku_id, task_id.start + task_size, task_id.end)
+                self.pending_tasks_queue.insert(0, old_task_id)
                 return Task(new_task_id, worker)
 
         task_id = self.current_sudoku.get_splitted_task_id(task_size)
@@ -203,10 +208,8 @@ class WTManager:
     def finish_task(self, task_id: TaskID, solution: str = None):
         """Remove a task from the working list."""
         task = self.working_tasks.get(task_id)
-        self.logger.info("HEAR")
         if task is not None:
             task.worker.task_done()
-            self.logger.critical(task.worker.task_response_time)
             del self.working_tasks[task_id]
         else:
             try:
@@ -298,7 +301,7 @@ class WTManager:
                 if task.has_exceeded_tries():
                     self.logger.warning(f"Task {task.task_id} has timed out. [Exceeded Retries]")
                     # task expired
-                    self.unassign_task(task) # add to pending queue
+                    self.kill_worker(task.worker)
                 else:
                     retry_tasks.append(task) # client must retry !!
                     task.retry()
