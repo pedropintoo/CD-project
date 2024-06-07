@@ -265,8 +265,6 @@ class Node:
             if solution is not None:
                 self.logger.info(f"Sudoku is valid. [by Dispatcher]")
 
-            if self.myWork.pending_stats['uncommitted_validations'] % 23 == 0: # only show a small part..
-                self.logger.debug(f"Dispatcher is working in free time... {task_id} [{self.myWork.task_response_time},{self.myWork.task_size}]")
 
             self.wtManager.finish_task(task_id, solution) 
 
@@ -371,7 +369,11 @@ class Node:
                         if worker.socket == None:
                             # worker was dead and socket must be reconnected
                             self.connectWorker(host_port)
+                        if worker.isAvailable == False and not worker.Alive:
+                            worker.task_done()
+                            self.logger.error(f"Worker {worker.worker_address} came from deads!")
                         worker.flooding_received() # update the last flooding time
+                        
 
                     worker.network = aliveNodes # update worker network
 
@@ -403,7 +405,8 @@ class Node:
                     worker = self.connectWorker(host_port)
                     self.wtManager.kill_worker(host_port, close_socket=False) # kill the worker if it is already connected
                     worker.flooding_received() # if the worker is not new it is a reconnection!
-                    
+                    # worker.task_done() # TODO: check this
+
                     # reply with the list of nodes
                     msg = P2PProtocol.join_reply(aliveNodes=list(self.wtManager.get_alive_workers_address()))
                     self.send_msg(worker, msg)
