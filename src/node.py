@@ -347,7 +347,7 @@ class Node:
 
                 worker = self.wtManager.workersDict.get(host_port)
 
-                if solution is not "INVALID":
+                if solution != "INVALID":
                     self.logger.debug(f"Sudoku is valid.")
                     msg = P2PProtocol.solve_reply(self.p2p_server.replyAddress, task_id, solution)
                 else:
