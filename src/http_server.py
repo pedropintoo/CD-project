@@ -3,7 +3,7 @@ import socketserver, socket, json
 from queue import Queue
 from threading import Lock, Thread
 from src.sudoku_algorithm import SudokuAlgorithm
-from src.utils.serializer_xml import dict_to_xml, parse_xml
+from src.middleware import Middleware
 
 class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
     request_queue = None
@@ -24,17 +24,8 @@ class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
                     length = int(self.headers.get('Content-Length'))
                     data = self.rfile.read(length).decode('utf8')
 
-                    content_type = self.headers.get('Content-Type', 'application/json')
-                    
-                    if 'application/xml' in content_type:
-                        # Try to parse the XML data
-                        sudoku = parse_xml(data)['sudoku']
-                        self.logger.critical("XML")
-                        self.logger.critical(sudoku)
-                    else:
-                        # Try to parse the JSON data
-                        sudoku = json.loads(data)['sudoku']
-                        self.logger.critical(sudoku)
+                    sudoku = Middleware.parse_request(self.headers, data)
+                    self.logger.critical(sudoku)
  
                     self.logger.warning(f"HTTP request for {sudoku}.")
                     
@@ -79,19 +70,11 @@ class HTTPRequestHandler(http_server.BaseHTTPRequestHandler):
             self.wfile.write(b"404 Not Found\n")
 
     def _handle_get_request(self, data):
-        content_type = self.headers.get('Content-Type', 'application/json')
-        if 'application/xml' in content_type:
-            self.send_response(200)
-            self.send_header('Content-type', 'application/xml')
-            self.end_headers()
-            response_data = dict_to_xml(data)
-            self.wfile.write(response_data.encode('utf8'))
-        else:
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            response_data = json.dumps(data, indent=4) + "\n"
-            self.wfile.write(response_data.encode("utf8"))
+        content_type, response_data = Middleware.format_response(self.headers, data)
+        self.send_response(200)
+        self.send_header('Content-type', content_type)
+        self.end_headers()
+        self.wfile.write(response_data.encode('utf8'))
 
 
 class HTTPServerThread(Thread):
