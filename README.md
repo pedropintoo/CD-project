@@ -1,6 +1,10 @@
-# Projecto CD 2023/24
-João Pinto - 104384
-Pedro Pinto - 115304
+# 2ano/2semestre/CD/CD-project
+
+# Nota: 20
+
+Pedro Pinto (115304)
+
+João Pinto (104384)
 
 ## Overview
 This project is a distributed Sudoku solver that uses a network of nodes to solve Sudoku puzzles. Each node can be initialized locally or anchored to another node, and nodes can be given a handicap to affect their processing speed.
